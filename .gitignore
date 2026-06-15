@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Temporary files
+temp/
+*.mp4
+*.mp3
+*.jpg
+*.png
+*.wav
+
+# Data tracking (used_quotes.json is updated by the script)
+# We DO want to track this in git for quote tracking
+# data/used_quotes.json
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tokens (NEVER commit these!)
+temp_token.txt
