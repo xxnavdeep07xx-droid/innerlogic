@@ -35,12 +35,17 @@ jobs:
           sudo apt-get install -y ffmpeg
           ffmpeg -version
 
-      - name: 🔤 Download fonts
+      - name: 🔤 Download fonts (Cormorant Garamond + Montserrat)
         run: |
           mkdir -p fonts
-          wget -q "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf" -O fonts/PlayfairDisplay-Regular.ttf 2>/dev/null || true
-          wget -q "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf" -O fonts/PlayfairDisplay-Italic.ttf 2>/dev/null || true
-          echo "Fonts prepared"
+          # Cormorant Garamond — elegant serif for philosophical quotes
+          wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf" -O "fonts/CormorantGaramond[wght].ttf" || true
+          wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf" -O "fonts/CormorantGaramond-Italic[wght].ttf" || true
+          # Montserrat — clean sans-serif for author attribution
+          wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf" -O "fonts/Montserrat[wght].ttf" || true
+          wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Italic%5Bwght%5D.ttf" -O "fonts/Montserrat-Italic[wght].ttf" || true
+          echo "Fonts downloaded"
+          ls -la fonts/
 
       - name: 🚀 Run reel automation
         env:
@@ -52,6 +57,20 @@ jobs:
           SMART_SCHEDULING: "true"
         run: |
           python3 src/main.py
+
+      - name: 💾 Save performance data
+        if: always()
+        run: |
+          if [ -f data/post_performance.json ]; then
+            git config --global user.name "InnerLogic Bot"
+            git config --global user.email "bot@innerlogic.dev"
+            git add data/post_performance.json
+            git diff --cached --quiet || git commit -m "📊 Update post performance data"
+            git push
+            echo "Performance data saved"
+          else
+            echo "No performance data to save"
+          fi
 
       - name: 🧹 Cleanup
         if: always()
