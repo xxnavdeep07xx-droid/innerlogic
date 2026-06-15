@@ -10,6 +10,9 @@ on:
   # Allow manual trigger for testing
   workflow_dispatch:
 
+permissions:
+  contents: write  # Needed to push performance data back to repo
+
 jobs:
   post-reel:
     runs-on: ubuntu-latest
@@ -54,7 +57,8 @@ jobs:
           INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
           INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          SMART_SCHEDULING: "true"
+          # Smart scheduling ON for cron, OFF for manual triggers (post immediately)
+          SMART_SCHEDULING: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           python3 src/main.py
 

@@ -300,18 +300,13 @@ def wait_until_best_time(best_hour_ist):
     now_ist = _get_current_ist_time()
 
     # Target time today in IST
+    # Randomize minute within 0-45 to look natural (±random offset from top of hour)
     target_ist = now_ist.replace(
         hour=best_hour_ist,
-        minute=random.randint(-15, 15),  # ±15 min randomization
+        minute=random.randint(0, 45),  # Random minute 0-45 (avoids spilling into next hour)
         second=random.randint(0, 59),
         microsecond=0
     )
-
-    # Clamp minute to 0-59
-    if target_ist.minute < 0:
-        target_ist = target_ist.replace(minute=0)
-    elif target_ist.minute > 45:
-        target_ist = target_ist.replace(minute=45)
 
     # If target is in the past, post immediately
     if target_ist <= now_ist:
