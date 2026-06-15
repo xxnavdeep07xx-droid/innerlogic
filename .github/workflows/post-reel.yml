@@ -45,9 +45,18 @@ jobs:
           INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
           INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
+          INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
           python3 src/main.py
+
+      - name: 💾 Save updated session
+        if: always()
+        run: |
+          # If session was updated, save it as artifact for next run
+          if [ -f data/ig_session.json ]; then
+            echo "Session file exists — it will be reused on next run via INSTAGRAM_SESSION secret"
+          fi
 
       - name: 🧹 Cleanup
         if: always()

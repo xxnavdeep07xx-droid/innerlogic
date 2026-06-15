@@ -1,0 +1,51 @@
+{
+    "uuids": {
+        "phone_id": "c06c6fb5-8be4-45c0-b5c0-3b1e3f12d1e8",
+        "uuid": "c3db4cd6-3f2b-43ac-8fdf-09d1575b60a1",
+        "client_session_id": "ce89f4d6-44dd-4d6f-a66f-95d5348fa443",
+        "advertising_id": "bebdd4ba-1749-4707-88de-04aa6564141c",
+        "android_device_id": "android-19570e9497b1286a",
+        "request_id": "126dceec-07b7-4e4b-97df-165fe2d76ff0",
+        "tray_session_id": "064fef9e-5696-4f3a-8743-f70b6b2ae317"
+    },
+    "mid": "ai-vGAABAAFYg7kN1ADIJc1Qr8re",
+    "ig_u_rur": null,
+    "ig_www_claim": null,
+    "authorization_data": {},
+    "cookies": {},
+    "last_login": null,
+    "device_settings": {
+        "android_version": 30,
+        "android_release": "11.0.0",
+        "dpi": "480dpi",
+        "resolution": "1080x2400",
+        "manufacturer": "Samsung",
+        "device": "SM-G991B",
+        "model": "Galaxy S21",
+        "cpu": "exynos5",
+        "app_version": "314.0.0.27.107",
+        "version_code": "314665256"
+    },
+    "user_agent": "Instagram 314.0.0.27.107 Android (30/11.0.0; 480dpi; 1080x2400; Samsung; Galaxy S21; SM-G991B; exynos5; en_US; 314665256)",
+    "country": "US",
+    "country_code": 1,
+    "locale": "en_US",
+    "timezone_offset": -14400,
+    "timezone_name": "GMT-04:00",
+    "push_disabled": true,
+    "request_timeout": 1,
+    "public_request_retries_count": 3,
+    "public_request_retries_timeout": 2,
+    "session_retry_total": 3,
+    "session_retry_backoff_factor": 2,
+    "session_retry_statuses": [
+        429,
+        500,
+        502,
+        503,
+        504
+    ],
+    "public_transport": "requests",
+    "public_transport_impersonate": "chrome136",
+    "tls_verify": true
+}
