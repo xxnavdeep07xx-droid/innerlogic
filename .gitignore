@@ -34,6 +34,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Fonts (downloaded at runtime from Google Fonts)
+fonts/*.ttf
+fonts/*.otf
+
 # Tokens & sessions (NEVER commit these!)
 temp_token.txt
 data/ig_session.json

@@ -4,13 +4,13 @@ Inner Logic — Instagram Reel Automation
 ========================================
 Main orchestrator that ties together all pipeline steps:
 1. Scrape a unique philosophical quote from the web
-2. Generate a dark cinematic background image
-3. Download royalty-free music
-4. Create a 15-second reel with FFmpeg
-5. Wait for the best posting time (smart scheduler)
-6. Post reel to Instagram via instagrapi (no API tokens needed!)
-7. Record performance for future scheduling optimization
-8. Clean up temporary files
+2. Download fonts (Cormorant Garamond + Montserrat from Google Fonts)
+3. Generate a dark cinematic background image
+4. Download royalty-free music
+5. Create a 15-second reel with FFmpeg
+6. Wait for the best posting time (smart scheduler)
+7. Post reel to Instagram via instagrapi (no API tokens needed!)
+8. Record performance for future scheduling optimization
 """
 
 import os
@@ -31,6 +31,7 @@ from music_fetcher import fetch_music
 from video_creator import create_reel
 from caption_generator import generate_caption
 from instagram import post_reel, login
+from fonts_setup import ensure_fonts
 from smart_scheduler import (
     calculate_best_time,
     wait_until_best_time,
@@ -114,39 +115,44 @@ def main():
         setup_temp_dir()
         
         # Step 1: Scrape a unique quote from the web
-        logger.info("💡 Step 1/7: Scraping a unique philosophical quote...")
+        logger.info("💡 Step 1/8: Scraping a unique philosophical quote...")
         quote = pick_quote_from_web(str(USED_QUOTES_FILE))
         logger.info(f"   📝 \"{quote['text'][:60]}...\" — {quote['author']}")
         logger.info(f"   🔗 Source: {quote.get('source', 'unknown')}")
         
-        # Step 2: Generate background image
-        logger.info("🎨 Step 2/7: Generating dark cinematic image...")
+        # Step 2: Download fonts (if not cached)
+        logger.info("🔤 Step 2/8: Ensuring fonts are available...")
+        font_paths = ensure_fonts(str(FONTS_DIR))
+        logger.info("   ✅ Fonts ready")
+        
+        # Step 3: Generate background image
+        logger.info("🎨 Step 3/8: Generating dark cinematic image...")
         image_path = generate_image(quote, str(TEMP_DIR))
         logger.info(f"   🖼️  Image saved: {image_path}")
         
-        # Step 3: Fetch music
-        logger.info("🎵 Step 3/7: Downloading royalty-free music...")
+        # Step 4: Fetch music
+        logger.info("🎵 Step 4/8: Downloading royalty-free music...")
         music_path = fetch_music("", str(TEMP_DIR))
         logger.info(f"   🎶 Music saved: {music_path}")
         
-        # Step 4: Create video reel
-        logger.info("🎬 Step 4/7: Creating 15-second reel...")
+        # Step 5: Create video reel
+        logger.info("🎬 Step 5/8: Creating 15-second reel...")
         video_path = create_reel(
             image_path=image_path,
             music_path=music_path,
             quote=quote,
             temp_dir=str(TEMP_DIR),
-            fonts_dir=str(FONTS_DIR)
+            font_paths=font_paths
         )
         logger.info(f"   📹 Video saved: {video_path}")
         
-        # Step 5: Generate caption
-        logger.info("📝 Step 5/7: Generating caption & hashtags...")
+        # Step 6: Generate caption
+        logger.info("📝 Step 6/8: Generating caption & hashtags...")
         caption = generate_caption(quote)
         logger.info(f"   📋 Caption: {caption[:80]}...")
         
-        # Step 6: Smart scheduling — calculate and wait for the best time
-        logger.info("⏰ Step 6/7: Smart scheduling — finding the best time to post...")
+        # Step 7: Smart scheduling — calculate and wait for the best time
+        logger.info("⏰ Step 7/8: Smart scheduling — finding the best time to post...")
         
         if SMART_SCHEDULING:
             # Login early to fetch performance data for scheduling
@@ -159,8 +165,8 @@ def main():
         else:
             logger.info("   📋 Smart scheduling disabled — posting now")
         
-        # Step 7: Post reel to Instagram
-        logger.info("📱 Step 7/7: Posting reel to Instagram...")
+        # Step 8: Post reel to Instagram
+        logger.info("📱 Step 8/8: Posting reel to Instagram...")
         result = post_reel(
             video_path=video_path,
             caption=caption

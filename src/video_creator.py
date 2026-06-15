@@ -36,10 +36,15 @@ def wrap_quote_text(text, max_chars_per_line=28):
     return lines
 
 
-def create_subtitle_file(quote, temp_dir, fonts_dir):
+def create_subtitle_file(quote, temp_dir, font_paths):
     """
     Create an ASS (Advanced SubStation Alpha) subtitle file
     for the quote text overlay with fade-in/fade-out animation.
+    
+    Args:
+        quote: Dict with 'text', 'author', 'category' keys
+        temp_dir: Directory for temporary files
+        font_paths: Dict with 'quote' and 'author' font paths from fonts_setup
     """
     quote_text = quote["text"]
     author = quote["author"]
@@ -48,33 +53,25 @@ def create_subtitle_file(quote, temp_dir, fonts_dir):
     lines = wrap_quote_text(quote_text, max_chars_per_line=28)
     wrapped_text = "\\N".join(lines)  # \N is ASS newline
     
-    # Determine font path
-    font_name = "PlayfairDisplay-Regular"
-    font_italic = "PlayfairDisplay-Italic"
-    
-    # Check if custom fonts exist
-    regular_font = os.path.join(fonts_dir, f"{font_name}.ttf")
-    italic_font = os.path.join(fonts_dir, f"{font_italic}.ttf")
-    
-    if os.path.exists(regular_font):
-        quote_fontname = regular_font
-    else:
-        quote_fontname = "Playfair Display"
-    
-    if os.path.exists(italic_font):
-        author_fontname = italic_font
-    else:
-        author_fontname = "Playfair Display"
+    # Get font names from the font_paths dict
+    # font_paths values are either full file paths (preferred) or system font names (fallback)
+    quote_fontname = font_paths.get("quote", "Cormorant Garamond")
+    author_fontname = font_paths.get("author", "Montserrat")
     
     # Calculate vertical position based on number of lines
     num_lines = len(lines)
     # Center vertically, accounting for author line
     total_text_lines = num_lines + 1  # quote lines + author line
-    line_height = 60  # pixels between lines
+    line_height = 64  # pixels between lines (slightly more breathing room)
     total_height = total_text_lines * line_height
     start_y = int((1920 - total_height) / 2)
     
     # Build ASS subtitle content
+    # Style parameters tuned for dark cinematic philosophical aesthetic:
+    #   - Quote: Cormorant Garamond SemiBold, warm white, generous spacing
+    #   - Author: Montserrat Light Italic, softer white, smaller size
+    #   - Outline: subtle dark glow for readability on any background
+    #   - Shadow: soft drop shadow for depth
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
 ScriptType: v4.00+
@@ -84,8 +81,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quote,{quote_fontname},48,&H00FFFFFF,&H000000FF,&H40000000,&HC0000000,-1,0,0,0,100,100,2,0,1,3,3,8,80,80,{start_y},1
-Style: Author,{author_fontname},34,&H90FFFFFF,&H000000FF,&H40000000,&HC0000000,-1,-1,0,0,100,100,2,0,1,2,2,8,80,80,{start_y + num_lines * 60 + 20},1
+Style: Quote,{quote_fontname},50,&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,3,0,1,4,4,8,100,100,{start_y},1
+Style: Author,{author_fontname},32,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,3,8,100,100,{start_y + num_lines * 64 + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -100,7 +97,7 @@ Dialogue: 0,0:00:01.80,0:00:13.50,Author,,0,0,0,,{{\\fade(255,0,255,1800,12500)}
     return subtitle_path
 
 
-def create_reel(image_path, music_path, quote, temp_dir, fonts_dir, duration=15):
+def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15):
     """
     Create a 15-second Instagram Reel video.
     
@@ -109,14 +106,14 @@ def create_reel(image_path, music_path, quote, temp_dir, fonts_dir, duration=15)
         music_path: Path to the background music (can be None)
         quote: Dict with 'text', 'author', 'category' keys
         temp_dir: Directory for temporary files
-        fonts_dir: Directory containing font files
+        font_paths: Dict with 'quote' and 'author' font paths from fonts_setup
         duration: Video duration in seconds (default 15)
     
     Returns:
         str: Path to the created video file
     """
     output_path = os.path.join(temp_dir, "reel.mp4")
-    subtitle_path = create_subtitle_file(quote, temp_dir, fonts_dir)
+    subtitle_path = create_subtitle_file(quote, temp_dir, font_paths)
     
     # Calculate Ken Burns zoom parameters
     # Slow zoom from 1.0 to 1.12 over the duration
@@ -134,8 +131,11 @@ def create_reel(image_path, music_path, quote, temp_dir, fonts_dir, duration=15)
     has_music = music_path and os.path.exists(music_path)
     if has_music:
         cmd.extend(["-stream_loop", "-1", "-i", music_path])
+    else:
+        # No music — add silent audio track as input 2 (Instagram requires audio)
+        cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"])
     
-    # Video filters
+    # Video filters (applied AFTER all inputs are declared)
     video_filters = [
         # Scale image to fit 1080x1920
         "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
@@ -152,9 +152,7 @@ def create_reel(image_path, music_path, quote, temp_dir, fonts_dir, duration=15)
         cmd.extend(["-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3"])
         cmd.extend(["-map", "0:v", "-map", "1:a"])
     else:
-        # No music — add silent audio track (Instagram requires audio)
-        cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"])
-        cmd.extend(["-map", "0:v", "-map", "2:a"])
+        cmd.extend(["-map", "0:v", "-map", "1:a"])
     
     # Output settings — explicitly set duration, NO -shortest
     cmd.extend([
