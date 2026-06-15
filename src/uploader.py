@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """
+DEPRECATED — This module is no longer used by the pipeline.
+With instagrapi, videos are uploaded directly from the local file.
+No public URL is needed anymore. This file is kept for reference only.
+
 Uploader — Uploads video to temporary file hosting for Instagram API access.
 Instagram requires a publicly accessible video URL for reel publishing.
 Uses multiple free hosting services with fallbacks.

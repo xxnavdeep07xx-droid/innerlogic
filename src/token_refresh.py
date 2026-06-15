@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """
+DEPRECATED — This module is no longer used by the pipeline.
+With instagrapi, there are no access tokens to refresh.
+This file is kept for reference only.
+
 Token Refresh — Automatically refreshes Instagram Graph API access tokens.
 Short-lived tokens (~1 hour) are exchanged for long-lived tokens (60 days).
 Long-lived tokens can be refreshed before expiry to get a new 60-day token.
