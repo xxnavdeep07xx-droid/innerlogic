@@ -36,55 +36,23 @@ jobs:
       - name: 🔤 Download fonts
         run: |
           mkdir -p fonts
-          # Download Playfair Display (elegant serif font)
           wget -q "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf" -O fonts/PlayfairDisplay-Regular.ttf 2>/dev/null || true
           wget -q "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf" -O fonts/PlayfairDisplay-Italic.ttf 2>/dev/null || true
-          # If downloads fail, we'll use system fonts
-          echo "Font files prepared"
-
-      - name: 🔄 Refresh access token
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
-          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
-        run: |
-          # First, exchange for a long-lived token
-          python3 -c "
-          from src.token_refresh import exchange_for_long_lived_token
-          import os
-          token = os.environ['INSTAGRAM_ACCESS_TOKEN']
-          app_id = os.environ['FACEBOOK_APP_ID']
-          app_secret = os.environ['FACEBOOK_APP_SECRET']
-          try:
-              new_token = exchange_for_long_lived_token(token, app_id, app_secret)
-              # Save to file for the next step
-              with open('temp_token.txt', 'w') as f:
-                  f.write(new_token)
-              print('Token refreshed successfully!')
-          except Exception as e:
-              print(f'Token refresh failed: {e}')
-              with open('temp_token.txt', 'w') as f:
-                  f.write(token)
-              print('Using existing token')
-          "
+          echo "Fonts prepared"
 
       - name: 🚀 Run reel automation
         env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_BUSINESS_ACCOUNT_ID: ${{ secrets.INSTAGRAM_BUSINESS_ACCOUNT_ID }}
-          FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
-          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
+          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+          INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
         run: |
-          # Use refreshed token if available
-          if [ -f temp_token.txt ]; then
-            export INSTAGRAM_ACCESS_TOKEN=$(cat temp_token.txt)
-          fi
           python3 src/main.py
 
       - name: 🧹 Cleanup
         if: always()
         run: |
-          rm -f temp_token.txt
           rm -rf temp/

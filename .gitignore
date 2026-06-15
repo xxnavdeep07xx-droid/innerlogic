@@ -34,5 +34,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Tokens (NEVER commit these!)
+# Tokens & sessions (NEVER commit these!)
 temp_token.txt
+data/ig_session.json
