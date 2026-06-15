@@ -1,4 +1,6 @@
 requests>=2.31.0
 Pillow>=10.0.0
 instagrapi>=2.0.0
+instagrapi[video]>=2.0.0
+moviepy==2.2.1
 pyotp>=2.9.0

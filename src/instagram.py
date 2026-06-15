@@ -244,10 +244,28 @@ def upload_reel(cl, video_path, caption):
     """
     print("   📤 Uploading reel to Instagram...")
 
+    # Generate thumbnail using FFmpeg (more reliable than moviepy)
+    thumbnail_path = None
+    try:
+        import subprocess
+        thumbnail_path = video_path + ".jpg"
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-ss", "0.5",
+             "-vframes", "1", "-q:v", "2", thumbnail_path],
+            capture_output=True, timeout=30
+        )
+        if result.returncode == 0 and os.path.exists(thumbnail_path):
+            print("   🖼️  Thumbnail generated with FFmpeg")
+        else:
+            thumbnail_path = None
+    except Exception:
+        thumbnail_path = None
+
     try:
         media = cl.clip_upload(
             path=video_path,
             caption=caption,
+            thumbnail=thumbnail_path,
             extra_data={
                 "source_type": "4",  # Camera
                 "delivery_class": "organic",
