@@ -22,7 +22,7 @@ from pathlib import Path
 # Add src directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from reddit_scraper import pick_quote_from_reddit
+from quote_scraper import pick_quote_from_web
 from quote_picker import pick_quote
 from image_generator import generate_image
 from music_fetcher import fetch_music
@@ -48,10 +48,7 @@ INSTAGRAM_PASSWORD = os.environ.get("INSTAGRAM_PASSWORD", "")
 INSTAGRAM_TOTP_SECRET = os.environ.get("INSTAGRAM_TOTP_SECRET", "")
 
 # API keys (optional)
-PIXABAY_API_KEY = os.environ.get("PIXABAY_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
-REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
-REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -107,8 +104,8 @@ def main():
         setup_temp_dir()
         
         # Step 1: Scrape a unique quote from Reddit
-        logger.info("💡 Step 1/6: Scraping a unique quote from Reddit...")
-        quote = pick_quote_from_reddit(str(USED_REDDIT_FILE))
+        logger.info("💡 Step 1/6: Scraping a unique philosophical quote...")
+        quote = pick_quote_from_web(str(USED_QUOTES_FILE))
         logger.info(f"   📝 \"{quote['text'][:60]}...\" — {quote['author']}")
         logger.info(f"   🔗 Source: {quote.get('source', 'unknown')}")
         
@@ -119,7 +116,7 @@ def main():
         
         # Step 3: Fetch music
         logger.info("🎵 Step 3/6: Downloading royalty-free music...")
-        music_path = fetch_music(PIXABAY_API_KEY, str(TEMP_DIR))
+        music_path = fetch_music("", str(TEMP_DIR))
         logger.info(f"   🎶 Music saved: {music_path}")
         
         # Step 4: Create video reel
