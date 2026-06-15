@@ -2,8 +2,10 @@ name: Daily Instagram Reel
 
 on:
   schedule:
-    # Run at 8:00 PM IST = 14:30 UTC (IST = UTC+5:30)
-    - cron: '30 14 * * *'
+    # Trigger at 5:30 PM IST = 12:00 UTC (IST = UTC+5:30)
+    # The smart scheduler will calculate the best time and wait
+    # This gives a window from 5:30 PM to 11 PM IST for optimal posting
+    - cron: '0 12 * * *'
   
   # Allow manual trigger for testing
   workflow_dispatch:
@@ -47,16 +49,9 @@ jobs:
           INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
           INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          SMART_SCHEDULING: "true"
         run: |
           python3 src/main.py
-
-      - name: 💾 Save updated session
-        if: always()
-        run: |
-          # If session was updated, save it as artifact for next run
-          if [ -f data/ig_session.json ]; then
-            echo "Session file exists — it will be reused on next run via INSTAGRAM_SESSION secret"
-          fi
 
       - name: 🧹 Cleanup
         if: always()
