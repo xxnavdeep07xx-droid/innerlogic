@@ -1,0 +1,713 @@
+     1→#!/usr/bin/env python3
+     2→"""
+     3→Video Creator — Creates 15-second Instagram Reels using FFmpeg + MoviePy.
+     4→
+     5→Features:
+     6→- Ken Burns zoom effect (smooth ease-in-out, configurable direction)
+     7→- Cinematic dark vignette overlay for depth
+     8→- Particle/dust overlay for cinematic atmosphere
+     9→- Gradient dark overlay for text readability
+    10→- Text overlay with fade-in/fade-out (MoviePy or ASS subtitles)
+    11→- Audio crossfade (fade in/out)
+    12→- Color grading (muted, cinematic look)
+    13→- FFmpeg fallback if MoviePy fails
+    14→
+    15→Output: 1080x1920 (9:16) MP4, H.264, AAC audio.
+    16→"""
+    17→
+    18→import subprocess
+    19→import os
+    20→import textwrap
+    21→import random
+    22→import math
+    23→from pathlib import Path
+    24→
+    25→try:
+    26→    from moviepy import (
+    27→        ImageClip, AudioFileClip, CompositeVideoClip, TextClip, VideoClip
+    28→    )
+    29→    from moviepy.video.fx import FadeIn, FadeOut
+    30→    from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
+    31→    HAS_MOVIEPY = True
+    32→except ImportError:
+    33→    HAS_MOVIEPY = False
+    34→
+    35→
+    36→# ─── Configuration ────────────────────────────────────────────────────────────
+    37→
+    38→REEL_WIDTH = 1080
+    39→REEL_HEIGHT = 1920
+    40→DEFAULT_DURATION = 15
+    41→DEFAULT_FPS = 30
+    42→
+    43→# Ken Burns zoom range
+    44→ZOOM_START = 1.0
+    45→ZOOM_END = 1.15
+    46→
+    47→# Vignette strength (0 = none, 1 = max)
+    48→VIGNETTE_STRENGTH = 0.55
+    49→
+    50→# Text readability gradient (dark overlay at center for quote legibility)
+    51→TEXT_DARKEN_OPACITY = 0.45
+    52→
+    53→
+    54→# ─── Text Wrapping ────────────────────────────────────────────────────────────
+    55→
+    56→def wrap_quote_text(text, max_chars_per_line=32):
+    57→    """
+    58→    Wrap quote text for screen display.
+    59→    Returns a list of lines, each within the max character limit.
+    60→    """
+    61→    words = text.split()
+    62→    lines = []
+    63→    current_line = ""
+    64→    
+    65→    for word in words:
+    66→        test_line = f"{current_line} {word}".strip()
+    67→        if len(test_line) <= max_chars_per_line:
+    68→            current_line = test_line
+    69→        else:
+    70→            if current_line:
+    71→                lines.append(current_line)
+    72→            current_line = word
+    73→    
+    74→    if current_line:
+    75→        lines.append(current_line)
+    76→    
+    77→    return lines
+    78→
+    79→
+    80→# ─── ASS Subtitle (FFmpeg fallback) ──────────────────────────────────────────
+    81→
+    82→def create_subtitle_file(quote, temp_dir, font_paths):
+    83→    """
+    84→    Create an ASS subtitle file for FFmpeg fallback mode.
+    85→    Enhanced with better fade timing and shadow effects.
+    86→    """
+    87→    quote_text = quote["text"]
+    88→    author = quote["author"]
+    89→    
+    90→    lines = wrap_quote_text(quote_text, max_chars_per_line=32)
+    91→    wrapped_text = "\\N".join(lines)
+    92→    
+    93→    quote_fontname = font_paths.get("quote", "Cormorant Garamond")
+    94→    author_fontname = font_paths.get("author", "Montserrat")
+    95→    
+    96→    num_lines = len(lines)
+    97→    total_text_lines = num_lines + 1
+    98→    line_height = 56
+    99→    total_height = total_text_lines * line_height
+   100→    start_y = int((1920 - total_height) / 2)
+   101→    
+   102→    # Fade timing: quote appears at 0.8s, author at 1.8s, both fade out at 13s
+   103→    quote_start = "0:00:00.80"
+   104→    quote_end = "0:00:13.50"
+   105→    author_start = "0:00:01.80"
+   106→    author_end = "0:00:13.50"
+   107→    
+   108→    # Fade: \fade(a1,a2,a3,t1,t2,t3,t4) — opacity ramp
+   109→    quote_fade = r"{\fade(255,255,0,0,80,1250,1350)}"
+   110→    author_fade = r"{\fade(255,255,0,0,180,1250,1350)}"
+   111→    
+   112→    # Dynamic font size based on quote length
+   113→    num_chars = len(quote_text)
+   114→    if num_chars <= 50:
+   115→        q_font_size = 46
+   116→    elif num_chars <= 80:
+   117→        q_font_size = 42
+   118→    elif num_chars <= 120:
+   119→        q_font_size = 38
+   120→    else:
+   121→        q_font_size = 34
+   122→    
+   123→    ass_content = f"""[Script Info]
+   124→Title: Inner Logic Quote
+   125→ScriptType: v4.00+
+   126→PlayResX: 1080
+   127→PlayResY: 1920
+   128→WrapStyle: 0
+   129→
+   130→[V4+ Styles]
+   131→Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+   132→Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,3,0,1,4,4,8,80,80,{start_y},1
+   133→Style: Author,{author_fontname},28,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,3,8,80,80,{start_y + num_lines * line_height + 30},1
+   134→
+   135→[Events]
+   136→Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+   137→Dialogue: 0,{quote_start},{quote_end},Quote,,0,0,0,,{quote_fade}{wrapped_text}
+   138→Dialogue: 0,{author_start},{author_end},Author,,0,0,0,,{author_fade}\\N— {author}
+   139→"""
+   140→    
+   141→    subtitle_path = os.path.join(temp_dir, "quote_subtitle.ass")
+   142→    with open(subtitle_path, "w", encoding="utf-8") as f:
+   143→        f.write(ass_content)
+   144→    
+   145→    return subtitle_path
+   146→
+   147→
+   148→# ─── Overlay Generators ──────────────────────────────────────────────────────
+   149→
+   150→def _create_vignette_clip(width, height, duration):
+   151→    """Create a dark vignette overlay clip for cinematic depth."""
+   152→    import numpy as np
+   153→    
+   154→    y, x = np.ogrid[:height, :width]
+   155→    cx, cy = width / 2, height / 2
+   156→    dist = np.sqrt((x - cx)**2 + (y - cy)**2) / np.sqrt(cx**2 + cy**2)
+   157→    alpha = np.clip(1.0 - dist * VIGNETTE_STRENGTH, 0, 1)
+   158→    alpha = (alpha * 180).astype(np.uint8)  # Max opacity ~70%
+   159→    
+   160→    img = np.zeros((height, width, 4), dtype=np.uint8)
+   161→    img[:, :, 3] = alpha
+   162→    
+   163→    vignette = ImageClip(img, duration=duration)
+   164→    return vignette
+   165→
+   166→
+   167→def _create_text_backdrop(width, height, duration):
+   168→    """
+   169→    Create a semi-transparent dark gradient behind the text area.
+   170→    This ensures quotes are always readable regardless of background brightness.
+   171→    """
+   172→    import numpy as np
+   173→    
+   174→    img = np.zeros((height, width, 4), dtype=np.uint8)
+   175→    
+   176→    # Dark gradient centered at ~40-65% of the screen height (quote area)
+   177→    center_y_start = int(height * 0.30)
+   178→    center_y_end = int(height * 0.72)
+   179→    center_y_mid = (center_y_start + center_y_end) // 2
+   180→    
+   181→    for y in range(center_y_start, center_y_end):
+   182→        # Distance from center of the text area (0 at center, 1 at edges)
+   183→        dist_from_center = abs(y - center_y_mid) / (center_y_end - center_y_start) * 2
+   184→        dist_from_center = min(dist_from_center, 1.0)
+   185→        
+   186→        # Opacity: strongest at center, fading to transparent at edges
+   187→        opacity = int(TEXT_DARKEN_OPACITY * 255 * (1.0 - dist_from_center ** 1.5))
+   188→        
+   189→        img[y, :, 3] = opacity  # Alpha channel
+   190→    
+   191→    backdrop = ImageClip(img, duration=duration)
+   192→    return backdrop
+   193→
+   194→
+   195→def _create_dust_particles(width, height, duration, num_particles=30):
+   196→    """
+   197→    Create floating dust/particle overlay for cinematic atmosphere.
+   198→    Subtle, slowly drifting particles that add depth and mood.
+   199→    """
+   200→    import numpy as np
+   201→    from PIL import Image
+   202→    
+   203→    fps = DEFAULT_FPS
+   204→    total_frames = int(duration * fps)
+   205→    
+   206→    # Pre-generate particle positions and properties
+   207→    particles = []
+   208→    for _ in range(num_particles):
+   209→        particles.append({
+   210→            "x": random.uniform(0, width),
+   211→            "y": random.uniform(0, height),
+   212→            "size": random.uniform(1.5, 4.0),
+   213→            "speed_x": random.uniform(-0.3, 0.3),
+   214→            "speed_y": random.uniform(-0.8, -0.15),  # Drift upward slowly
+   215→            "brightness": random.uniform(0.3, 0.8),
+   216→            "phase": random.uniform(0, math.pi * 2),  # For pulsing
+   217→            "pulse_speed": random.uniform(0.5, 2.0),
+   218→        })
+   219→    
+   220→    def make_frame(t):
+   221→        frame = np.zeros((height, width, 4), dtype=np.uint8)
+   222→        
+   223→        for p in particles:
+   224→            # Calculate position with drift
+   225→            x = p["x"] + p["speed_x"] * t * 30
+   226→            y = p["y"] + p["speed_y"] * t * 30
+   227→            
+   228→            # Wrap around
+   229→            x = x % width
+   230→            y = y % height
+   231→            
+   232→            # Pulse brightness
+   233→            pulse = 0.5 + 0.5 * math.sin(p["phase"] + t * p["pulse_speed"])
+   234→            brightness = p["brightness"] * pulse
+   235→            
+   236→            # Draw the particle (small circle)
+   237→            ix, iy = int(x), int(y)
+   238→            size = int(p["size"])
+   239→            alpha = int(brightness * 60)  # Keep it subtle
+   240→            
+   241→            # Simple pixel placement with anti-aliasing approximation
+   242→            for dy in range(-size, size + 1):
+   243→                for dx in range(-size, size + 1):
+   244→                    dist = math.sqrt(dx*dx + dy*dy)
+   245→                    if dist <= size:
+   246→                        px, py = ix + dx, iy + dy
+   247→                        if 0 <= px < width and 0 <= py < height:
+   248→                            falloff = 1.0 - (dist / max(size, 1))
+   249→                            pixel_alpha = int(alpha * falloff)
+   250→                            # Additive blending (take max to not overwrite brighter pixels)
+   251→                            frame[py, px, 3] = max(frame[py, px, 3], pixel_alpha)
+   252→        
+   253→        return frame
+   254→    
+   255→    dust_clip = VideoClip(frame_function=make_frame, duration=duration)
+   256→    return dust_clip
+   257→
+   258→
+   259→# ─── MoviePy Video Creation ──────────────────────────────────────────────────
+   260→
+   261→def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+   262→    """
+   263→    Create a cinematic reel using MoviePy for smoother effects.
+   264→    
+   265→    Enhanced features:
+   266→    - Ken Burns zoom with randomized direction (zoom in, zoom out, pan)
+   267→    - Dark text backdrop for guaranteed readability
+   268→    - Floating dust particles for cinematic atmosphere
+   269→    - Cinematic vignette overlay
+   270→    - Native text clips with precise fade timing
+   271→    - Audio crossfade with configurable curves
+   272→    """
+   273→    import numpy as np
+   274→    from PIL import Image
+   275→    
+   276→    output_path = os.path.join(temp_dir, "reel.mp4")
+   277→    
+   278→    # Load and prepare the background image
+   279→    bg_img = Image.open(image_path)
+   280→    bg_img = bg_img.resize((REEL_WIDTH, REEL_HEIGHT), Image.LANCZOS)
+   281→    bg_array = np.array(bg_img)
+   282→    
+   283→    # Randomize Ken Burns direction
+   284→    kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down"])
+   285→    
+   286→    # Ken Burns zoom: smooth ease-in-out
+   287→    def make_ken_burns_frame(t):
+   288→        progress = t / duration
+   289→        # Smoothstep for cinematic ease (slow start, fast middle, slow end)
+   290→        smooth = progress * progress * (3 - 2 * progress)
+   291→        
+   292→        h, w = bg_array.shape[:2]
+   293→        
+   294→        if kb_mode == "zoom_in":
+   295→            zoom = ZOOM_START + (ZOOM_END - ZOOM_START) * smooth
+   296→            new_w = int(w / zoom)
+   297→            new_h = int(h / zoom)
+   298→            x1 = (w - new_w) // 2
+   299→            y1 = (h - new_h) // 2
+   300→        elif kb_mode == "zoom_out":
+   301→            zoom = ZOOM_END - (ZOOM_END - ZOOM_START) * smooth
+   302→            new_w = int(w / zoom)
+   303→            new_h = int(h / zoom)
+   304→            x1 = (w - new_w) // 2
+   305→            y1 = (h - new_h) // 2
+   306→        elif kb_mode == "pan_up":
+   307→            zoom = 1.08
+   308→            new_w = int(w / zoom)
+   309→            new_h = int(h / zoom)
+   310→            x1 = (w - new_w) // 2
+   311→            max_y = h - new_h
+   312→            y1 = int(max_y * (1.0 - smooth))  # Pan from bottom to center
+   313→        elif kb_mode == "pan_down":
+   314→            zoom = 1.08
+   315→            new_w = int(w / zoom)
+   316→            new_h = int(h / zoom)
+   317→            x1 = (w - new_w) // 2
+   318→            max_y = h - new_h
+   319→            y1 = int(max_y * smooth)  # Pan from center to bottom
+   320→        else:
+   321→            zoom = 1.0 + 0.12 * smooth
+   322→            new_w = int(w / zoom)
+   323→            new_h = int(h / zoom)
+   324→            x1 = (w - new_w) // 2
+   325→            y1 = (h - new_h) // 2
+   326→        
+   327→        cropped = bg_array[y1:y1+new_h, x1:x1+new_w]
+   328→        img = Image.fromarray(cropped)
+   329→        img = img.resize((w, h), Image.LANCZOS)
+   330→        return np.array(img)
+   331→    
+   332→    zoomed_clip = VideoClip(frame_function=make_ken_burns_frame, duration=duration)
+   333→    
+   334→    # Build composite layers
+   335→    clips = [zoomed_clip]
+   336→    
+   337→    # Layer 1: Text backdrop (semi-transparent dark gradient for readability)
+   338→    try:
+   339→        backdrop = _create_text_backdrop(REEL_WIDTH, REEL_HEIGHT, duration)
+   340→        backdrop = backdrop.with_position(("center", "center"))
+   341→        clips.append(backdrop)
+   342→    except Exception as e:
+   343→        print(f"   Text backdrop skipped: {e}")
+   344→    
+   345→    # Layer 2: Vignette overlay for cinematic depth
+   346→    try:
+   347→        vignette = _create_vignette_clip(REEL_WIDTH, REEL_HEIGHT, duration)
+   348→        vignette = vignette.with_position(("center", "center"))
+   349→        clips.append(vignette)
+   350→    except Exception as e:
+   351→        print(f"   Vignette skipped: {e}")
+   352→    
+   353→    # Layer 3: Dust particles for cinematic atmosphere
+   354→    try:
+   355→        num_particles = random.randint(15, 40)
+   356→        dust = _create_dust_particles(REEL_WIDTH, REEL_HEIGHT, duration, num_particles)
+   357→        clips.append(dust)
+   358→    except Exception as e:
+   359→        print(f"   Dust particles skipped: {e}")
+   360→    
+   361→    # Layer 4: Text overlays
+   362→    try:
+   363→        quote_text = quote["text"]
+   364→        author = quote["author"]
+   365→        
+   366→        lines = wrap_quote_text(quote_text, max_chars_per_line=30)
+   367→        wrapped = "\n".join(lines)
+   368→        
+   369→        quote_font = font_paths.get("quote", "Cormorant-Garamond")
+   370→        author_font = font_paths.get("author", "Montserrat")
+   371→        
+   372→        # Dynamic font sizing based on quote length
+   373→        # Shorter quotes get bigger text, longer quotes get smaller
+   374→        num_chars = len(quote_text)
+   375→        if num_chars <= 50:
+   376→            q_font_size = 48
+   377→        elif num_chars <= 80:
+   378→            q_font_size = 42
+   379→        elif num_chars <= 120:
+   380→            q_font_size = 38
+   381→        else:
+   382→            q_font_size = 34
+   383→        
+   384→        # Calculate vertical position based on number of lines
+   385→        # More lines = push higher so nothing gets cut off
+   386→        num_lines = len(lines)
+   387→        if num_lines <= 2:
+   388→            quote_y = 0.38
+   389→        elif num_lines <= 3:
+   390→            quote_y = 0.33
+   391→        elif num_lines <= 4:
+   392→            quote_y = 0.28
+   393→        else:
+   394→            quote_y = 0.24
+   395→        
+   396→        # Quote text
+   397→        quote_clip = TextClip(
+   398→            text=wrapped,
+   399→            font_size=q_font_size,
+   400→            color="white",
+   401→            font=quote_font,
+   402→            text_align="center",
+   403→            size=(880, None),  # Slightly narrower for safe margins
+   404→            method="caption",
+   405→        )
+   406→        quote_clip = quote_clip.with_duration(duration - 1.5)
+   407→        quote_clip = quote_clip.with_position(("center", quote_y), relative=True)
+   408→        quote_clip = quote_clip.with_effects([FadeIn(1.0), FadeOut(2.0)])
+   409→        clips.append(quote_clip)
+   410→        
+   411→        # Author text — positioned below quote with smart offset
+   412→        author_y = min(quote_y + 0.05 * num_lines + 0.08, 0.72)
+   413→        
+   414→        author_clip = TextClip(
+   415→            text=f"— {author}",
+   416→            font_size=26,
+   417→            color="#CCCCCC",
+   418→            font=author_font,
+   419→            text_align="center",
+   420→            size=(880, None),
+   421→            method="caption",
+   422→        )
+   423→        author_clip = author_clip.with_duration(duration - 3.0)
+   424→        author_clip = author_clip.with_position(("center", author_y), relative=True)
+   425→        author_clip = author_clip.with_effects([FadeIn(0.8), FadeOut(2.0)])
+   426→        clips.append(author_clip)
+   427→        
+   428→    except Exception as e:
+   429→        print(f"   MoviePy text failed: {e}")
+   430→        print(f"   (Text will be added via FFmpeg overlay instead)")
+   431→    
+   432→    # Composite all layers
+   433→    video = CompositeVideoClip(clips, size=(REEL_WIDTH, REEL_HEIGHT))
+   434→    
+   435→    # Add audio
+   436→    has_music = music_path and os.path.exists(music_path)
+   437→    if has_music:
+   438→        audio = AudioFileClip(music_path)
+   439→        if audio.duration < duration:
+   440→            # Loop audio if shorter
+   441→            from moviepy import concatenate_audioclips
+   442→            repeats = int(duration / audio.duration) + 1
+   443→            audio = concatenate_audioclips([audio] * repeats)
+   444→        audio = audio.subclipped(0, min(duration, audio.duration))
+   445→        audio = audio.with_effects([AudioFadeIn(1.5), AudioFadeOut(3.0)])
+   446→        video = video.with_audio(audio)
+   447→    
+   448→    print(f"   MoviePy: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}...")
+   449→    
+   450→    # Write output
+   451→    video.write_videofile(
+   452→        output_path,
+   453→        fps=DEFAULT_FPS,
+   454→        codec="libx264",
+   455→        audio_codec="aac",
+   456→        audio_bitrate="128k",
+   457→        preset="medium",
+   458→        threads=2,
+   459→        logger=None,
+   460→    )
+   461→    
+   462→    file_size = os.path.getsize(output_path)
+   463→    print(f"   MoviePy: video created ({file_size / (1024*1024):.1f} MB)")
+   464→    
+   465→    # Clean up
+   466→    video.close()
+   467→    if has_music:
+   468→        audio.close()
+   469→    
+   470→    return output_path
+   471→
+   472→
+   473→# ─── FFmpeg Video Creation (Fallback) ────────────────────────────────────────
+   474→
+   475→def _generate_vignette_png(temp_dir, width=1080, height=1920):
+   476→    """
+   477→    Generate a vignette PNG overlay image using PIL.
+   478→    This is MUCH faster than FFmpeg's vignette filter since it's pre-rendered.
+   479→    """
+   480→    try:
+   481→        from PIL import Image, ImageDraw
+   482→        import numpy as np
+   483→        
+   484→        img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+   485→        arr = np.zeros((height, width, 4), dtype=np.uint8)
+   486→        
+   487→        y, x = np.ogrid[:height, :width]
+   488→        cx, cy = width / 2, height / 2
+   489→        dist = np.sqrt((x - cx)**2 + (y - cy)**2) / np.sqrt(cx**2 + cy**2)
+   490→        alpha = np.clip((dist - 0.3) * 200, 0, 160).astype(np.uint8)
+   491→        
+   492→        arr[:, :, 3] = alpha  # Black vignette with radial alpha
+   493→        img = Image.fromarray(arr)
+   494→        
+   495→        vignette_path = os.path.join(temp_dir, "vignette_overlay.png")
+   496→        img.save(vignette_path, "PNG")
+   497→        return vignette_path
+   498→        
+   499→    except Exception:
+   500→        return None
+   501→
+   502→
+   503→def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+   504→    """
+   505→    Create a reel using raw FFmpeg (proven fallback).
+   506→    Enhanced with color grading, vignette overlay, and ASS subtitles.
+   507→    
+   508→    Performance optimization:
+   509→    - Vignette uses a pre-rendered PNG overlay (way faster than FFmpeg vignette filter)
+   510→    - Color grading via eq filter (lightweight)
+   511→    - Single-pass rendering
+   512→    """
+   513→    output_path = os.path.join(temp_dir, "reel.mp4")
+   514→    subtitle_path = create_subtitle_file(quote, temp_dir, font_paths)
+   515→    
+   516→    fps = DEFAULT_FPS
+   517→    total_frames = duration * fps
+   518→    zoom_increment = 0.12 / total_frames
+   519→    
+   520→    # Randomize Ken Burns direction
+   521→    kb_mode = random.choice(["zoom_in", "zoom_out"])
+   522→    
+   523→    if kb_mode == "zoom_in":
+   524→        zoom_expr = f"1+{zoom_increment}*on"
+   525→    else:
+   526→        zoom_expr = f"1.12-{zoom_increment}*on"
+   527→    
+   528→    # Generate vignette PNG overlay (fast — pre-rendered)
+   529→    vignette_path = _generate_vignette_png(temp_dir)
+   530→    
+   531→    cmd = ["ffmpeg", "-y"]
+   532→    cmd.extend(["-loop", "1", "-t", str(duration), "-i", image_path])
+   533→    
+   534→    # Add vignette overlay as second video input
+   535→    if vignette_path:
+   536→        cmd.extend(["-loop", "1", "-t", str(duration), "-i", vignette_path])
+   537→    
+   538→    has_music = music_path and os.path.exists(music_path)
+   539→    if has_music:
+   540→        cmd.extend(["-stream_loop", "-1", "-i", music_path])
+   541→    else:
+   542→        cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"])
+   543→    
+   544→    # Build video filter chain
+   545→    if vignette_path:
+   546→        # Inputs: 0=bg_image, 1=vignette_png, 2=music_or_silent
+   547→        video_filters = [
+   548→            # Step 1: Scale, crop, zoom, color grade the background
+   549→            f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps},eq=brightness=0.02:contrast=1.1:saturation=0.85:gamma=0.95[bg]",
+   550→            # Step 2: Overlay vignette PNG on top
+   551→            f"[1:v][bg]overlay=0:0:format=auto[vo]",
+   552→            # Step 3: ASS subtitle overlay
+   553→            f"[vo]ass={subtitle_path}[v]",
+   554→        ]
+   555→        cmd.extend(["-filter_complex", ";".join(video_filters)])
+   556→        
+   557→        # Audio filters and mapping
+   558→        if has_music:
+   559→            cmd.extend(["-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3"])
+   560→            cmd.extend(["-map", "[v]", "-map", "2:a"])  # Audio is input #2
+   561→        else:
+   562→            cmd.extend(["-map", "[v]", "-map", "2:a"])  # Silent audio is input #2
+   563→    else:
+   564→        # Inputs: 0=bg_image, 1=music_or_silent
+   565→        video_filters = [
+   566→            "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+   567→            f"zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+   568→            "eq=brightness=0.02:contrast=1.1:saturation=0.85:gamma=0.95",
+   569→            f"ass={subtitle_path}",
+   570→        ]
+   571→        cmd.extend(["-vf", ",".join(video_filters)])
+   572→        
+   573→        if has_music:
+   574→            cmd.extend(["-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3"])
+   575→        
+   576→        cmd.extend(["-map", "0:v", "-map", "1:a"])
+   577→    
+   578→    cmd.extend([
+   579→        "-t", str(duration),
+   580→        "-c:v", "libx264",
+   581→        "-preset", "medium",
+   582→        "-crf", "23",
+   583→        "-c:a", "aac",
+   584→        "-b:a", "128k",
+   585→        "-pix_fmt", "yuv420p",
+   586→        "-movflags", "+faststart",
+   587→        output_path
+   588→    ])
+   589→    
+   590→    print(f"   FFmpeg: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}...")
+   591→    
+   592→    try:
+   593→        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+   594→        
+   595→        if result.returncode != 0:
+   596→            # If the vignette overlay failed, retry without it
+   597→            print(f"   FFmpeg vignette overlay failed — retrying without vignette...")
+   598→            return _create_reel_ffmpeg_simple(
+   599→                image_path, music_path, subtitle_path, temp_dir, duration, 
+   600→                zoom_expr, total_frames, fps, kb_mode
+   601→            )
+   602→        
+   603→        file_size = os.path.getsize(output_path)
+   604→        print(f"   FFmpeg: video created ({file_size / (1024*1024):.1f} MB)")
+   605→        return output_path
+   606→        
+   607→    except subprocess.TimeoutExpired:
+   608→        raise RuntimeError("FFmpeg timed out after 300 seconds")
+   609→    except FileNotFoundError:
+   610→        raise RuntimeError("FFmpeg not found")
+   611→
+   612→
+   613→def _create_reel_ffmpeg_simple(image_path, music_path, subtitle_path, temp_dir, 
+   614→                                duration, zoom_expr, total_frames, fps, kb_mode):
+   615→    """
+   616→    Simplified FFmpeg fallback — no vignette overlay, just the basics.
+   617→    Used if the complex filter chain fails.
+   618→    """
+   619→    output_path = os.path.join(temp_dir, "reel.mp4")
+   620→    
+   621→    cmd = ["ffmpeg", "-y"]
+   622→    cmd.extend(["-loop", "1", "-t", str(duration), "-i", image_path])
+   623→    
+   624→    has_music = music_path and os.path.exists(music_path)
+   625→    if has_music:
+   626→        cmd.extend(["-stream_loop", "-1", "-i", music_path])
+   627→    else:
+   628→        cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"])
+   629→    
+   630→    video_filters = [
+   631→        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+   632→        f"zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+   633→        "eq=brightness=0.02:contrast=1.1:saturation=0.85",
+   634→        f"ass={subtitle_path}",
+   635→    ]
+   636→    
+   637→    cmd.extend(["-vf", ",".join(video_filters)])
+   638→    
+   639→    if has_music:
+   640→        cmd.extend(["-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3"])
+   641→    
+   642→    cmd.extend(["-map", "0:v", "-map", "1:a"])
+   643→    cmd.extend([
+   644→        "-t", str(duration),
+   645→        "-c:v", "libx264",
+   646→        "-preset", "medium",
+   647→        "-crf", "23",
+   648→        "-c:a", "aac",
+   649→        "-b:a", "128k",
+   650→        "-pix_fmt", "yuv420p",
+   651→        "-movflags", "+faststart",
+   652→        output_path
+   653→    ])
+   654→    
+   655→    print(f"   FFmpeg (simple): rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s...")
+   656→    
+   657→    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+   658→    
+   659→    if result.returncode != 0:
+   660→        raise RuntimeError(f"FFmpeg simple failed: {result.stderr[-300:]}")
+   661→    
+   662→    file_size = os.path.getsize(output_path)
+   663→    print(f"   FFmpeg (simple): video created ({file_size / (1024*1024):.1f} MB)")
+   664→    return output_path
+   665→
+   666→
+   667→# ─── Main Entry Point ────────────────────────────────────────────────────────
+   668→
+   669→def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+   670→    """
+   671→    Create a 15-second Instagram Reel video.
+   672→    
+   673→    Tries MoviePy first (smoother zoom, vignette, dust particles, text backdrop),
+   674→    falls back to enhanced FFmpeg pipeline if MoviePy fails.
+   675→    
+   676→    Args:
+   677→        image_path: Path to the background image
+   678→        music_path: Path to the background music (can be None)
+   679→        quote: Dict with 'text', 'author', 'category' keys
+   680→        temp_dir: Directory for temporary files
+   681→        font_paths: Dict with 'quote' and 'author' font paths
+   682→        duration: Video duration in seconds (default 15)
+   683→    
+   684→    Returns:
+   685→        str: Path to the created video file
+   686→    """
+   687→    # Try MoviePy first for cinematic quality
+   688→    if HAS_MOVIEPY:
+   689→        try:
+   690→            print(f"   MoviePy available — creating enhanced cinematic reel...")
+   691→            return create_reel_moviepy(
+   692→                image_path, music_path, quote, temp_dir, font_paths, duration
+   693→            )
+   694→        except Exception as e:
+   695→            print(f"   MoviePy failed: {e}")
+   696→            print(f"   Falling back to FFmpeg pipeline...")
+   697→    
+   698→    # FFmpeg fallback (always works)
+   699→    print(f"   Using enhanced FFmpeg pipeline...")
+   700→    return create_reel_ffmpeg(
+   701→        image_path, music_path, quote, temp_dir, font_paths, duration
+   702→    )
+   703→
+   704→
+   705→if __name__ == "__main__":
+   706→    test_quote = {
+   707→        "text": "The only way to deal with an unfree world is to become so absolutely free that your very existence is an act of rebellion.",
+   708→        "author": "Albert Camus",
+   709→        "category": "existentialism"
+   710→    }
+   711→    print("This module requires FFmpeg/MoviePy and proper setup to test.")
+   712→    print("Run main.py instead for the full pipeline.")
+   713→
