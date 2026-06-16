@@ -143,6 +143,9 @@ def search_and_select_track(cl, history=None):
 
 def _try_trending(cl, history):
     """Try to find a track from Instagram's trending music."""
+    if not hasattr(cl, 'music_trending'):
+        logger.warning("   ⚠️ music_trending not available in this instagrapi version")
+        return None
     try:
         logger.info("   🎵 Insta Music: Checking trending tracks...")
         result = cl.music_trending(product="story_camera_clips_v2")
@@ -213,6 +216,9 @@ def _try_search(cl, history):
 
 def _try_browse(cl, history):
     """Try to find a track from the clips audio browser."""
+    if not hasattr(cl, 'music_clips_audio_browser'):
+        logger.warning("   ⚠️ music_clips_audio_browser not available in this instagrapi version")
+        return None
     try:
         product = random.choice(BROWSE_PRODUCTS)
         logger.info(f"   🎵 Insta Music: Browsing clips audio ({product})...")
@@ -308,39 +314,8 @@ def _format_track(track):
 
 # ─── Upload with Music ───────────────────────────────────────────────────────
 
-def upload_reel_with_instagram_music(cl, video_path, caption, track_info, history=None):
-    """
-    Upload a reel with Instagram's native music attached.
-    
-    Uses clip_upload_with_music() — Instagram handles audio mixing server-side.
-    No local audio processing needed.
-    
-    Args:
-        cl: Authenticated instagrapi Client
-        video_path: Path to the video file
-        caption: Caption text with hashtags
-        track_info: Track info dict from search_and_select_track()
-        history: Music history dict (loaded if None)
-    
-    Returns:
-        dict: Upload result with media ID
-    """
-    if history is None:
-        history = _load_history()
-    
-    # Get the raw track object (instagrapi Track or dict)
-    raw_track = track_info.get("raw_track")
-    
-    if not raw_track:
-        raise ValueError("No raw track object provided — cannot attach music")
-    
-    track_name = track_info.get("name", "Unknown")
-    track_artist = track_info.get("artist", "")
-    track_id = track_info.get("id", "")
-    
-    logger.info(f"   🎵 Attaching Instagram music: {track_name} by {track_artist}")
-    
-    # Generate thumbnail
+def _generate_thumbnail(video_path):
+    """Generate a thumbnail from the video using FFmpeg."""
     import subprocess
     thumbnail_path = None
     try:
@@ -356,49 +331,88 @@ def upload_reel_with_instagram_music(cl, video_path, caption, track_info, histor
             thumbnail_path = None
     except Exception:
         thumbnail_path = None
+    return thumbnail_path
+
+
+def upload_reel_with_instagram_music(cl, video_path, caption, track_info, history=None):
+    """
+    Upload a reel with Instagram's native music attached.
     
-    try:
-        # Use clip_upload_with_music — server-side audio mixing
-        # Music volume: 0.7 (background), Original volume: 0.3 (keep some ambient)
-        media = cl.clip_upload_with_music(
-            path=video_path,
-            caption=caption,
-            track=raw_track,
-            thumbnail=thumbnail_path,
-            music_volume=0.7,
-            original_volume=0.3,
-            audio_asset_start_time=0,  # Start from beginning of track
-            extra_data={
-                "source_type": "4",
-                "delivery_class": "organic",
-                "upload_id": str(int(__import__('time').time() * 1000)),
-            }
-        )
-        
-        if media:
-            logger.info(f"   ✅ Reel uploaded with Instagram music! ID: {media.pk}")
-            
-            # Mark track as used
-            _mark_track_used(track_id, f"{track_name} - {track_artist}", history)
-            
-            return {
-                "id": media.pk,
-                "code": media.code,
-                "status": "uploaded_with_music",
-                "music_track": track_name,
-                "music_artist": track_artist,
-            }
-        else:
-            raise RuntimeError("Upload returned no media object")
+    Tries multiple upload methods in order:
+    1. clip_upload_with_music() — all-in-one upload with music
+    2. clip_music_extra_data() + clip_upload() — manual music data attachment
+    3. clip_upload() without music — graceful fallback
     
-    except Exception as e:
-        error_msg = str(e)
-        
-        # If clip_upload_with_music fails, try fallback with clip_music_extra_data
-        logger.warning(f"   ⚠️ clip_upload_with_music failed: {error_msg[:80]}")
-        logger.info("   🔄 Trying fallback: clip_music_extra_data + clip_upload...")
-        
+    Args:
+        cl: Authenticated instagrapi Client
+        video_path: Path to the video file
+        caption: Caption text with hashtags
+        track_info: Track info dict from search_and_select_track()
+        history: Music history dict (loaded if None)
+    
+    Returns:
+        dict: Upload result with media ID
+    """
+    import time
+    
+    if history is None:
+        history = _load_history()
+    
+    # Get the raw track object (instagrapi Track or dict)
+    raw_track = track_info.get("raw_track")
+    
+    track_name = track_info.get("name", "Unknown")
+    track_artist = track_info.get("artist", "")
+    track_id = track_info.get("id", "")
+    
+    logger.info(f"   🎵 Attaching Instagram music: {track_name} by {track_artist}")
+    
+    # Generate thumbnail
+    thumbnail_path = _generate_thumbnail(video_path)
+    
+    errors = []
+    
+    # ── Method 1: clip_upload_with_music (all-in-one) ────────────────────────
+    if raw_track and hasattr(cl, 'clip_upload_with_music'):
         try:
+            logger.info("   🎵 Method 1: clip_upload_with_music...")
+            media = cl.clip_upload_with_music(
+                path=video_path,
+                caption=caption,
+                track=raw_track,
+                thumbnail=thumbnail_path,
+                music_volume=0.7,
+                original_volume=0.3,
+                audio_asset_start_time=0,
+                extra_data={
+                    "source_type": "4",
+                    "delivery_class": "organic",
+                    "upload_id": str(int(time.time() * 1000)),
+                }
+            )
+            
+            if media:
+                logger.info(f"   ✅ Reel uploaded with Instagram music! ID: {media.pk}")
+                _mark_track_used(track_id, f"{track_name} - {track_artist}", history)
+                return {
+                    "id": media.pk,
+                    "code": media.code,
+                    "status": "uploaded_with_music",
+                    "music_track": track_name,
+                    "music_artist": track_artist,
+                }
+        except Exception as e:
+            errors.append(f"clip_upload_with_music: {str(e)[:80]}")
+            logger.warning(f"   ⚠️ Method 1 failed: {str(e)[:80]}")
+    elif not raw_track:
+        errors.append("no raw_track provided")
+    else:
+        errors.append("clip_upload_with_music not available")
+    
+    # ── Method 2: clip_music_extra_data + clip_upload ────────────────────────
+    if raw_track and hasattr(cl, 'clip_music_extra_data') and hasattr(cl, 'clip_upload'):
+        try:
+            logger.info("   🔄 Method 2: clip_music_extra_data + clip_upload...")
             music_data = cl.clip_music_extra_data(
                 track=raw_track,
                 music_volume=0.7,
@@ -413,28 +427,56 @@ def upload_reel_with_instagram_music(cl, video_path, caption, track_info, histor
                     **music_data,
                     "source_type": "4",
                     "delivery_class": "organic",
-                    "upload_id": str(int(__import__('time').time() * 1000)),
+                    "upload_id": str(int(time.time() * 1000)),
                 }
             )
             
             if media:
-                logger.info(f"   ✅ Reel uploaded with music (fallback)! ID: {media.pk}")
+                logger.info(f"   ✅ Reel uploaded with music (method 2)! ID: {media.pk}")
                 _mark_track_used(track_id, f"{track_name} - {track_artist}", history)
-                
                 return {
                     "id": media.pk,
                     "code": media.code,
-                    "status": "uploaded_with_music_fallback",
+                    "status": "uploaded_with_music_method2",
                     "music_track": track_name,
                     "music_artist": track_artist,
                 }
-        
-        except Exception as e2:
-            logger.error(f"   ❌ Fallback upload also failed: {e2}")
-            raise RuntimeError(
-                f"Both music upload methods failed. "
-                f"Primary: {error_msg[:60]}. Fallback: {str(e2)[:60]}"
+        except Exception as e:
+            errors.append(f"clip_music_extra_data: {str(e)[:80]}")
+            logger.warning(f"   ⚠️ Method 2 failed: {str(e)[:80]}")
+    
+    # ── Method 3: Plain clip_upload without music (graceful fallback) ────────
+    if hasattr(cl, 'clip_upload'):
+        try:
+            logger.info("   🔄 Method 3: Uploading without music (plain clip_upload)...")
+            media = cl.clip_upload(
+                path=video_path,
+                caption=caption,
+                thumbnail=thumbnail_path,
+                extra_data={
+                    "source_type": "4",
+                    "delivery_class": "organic",
+                    "upload_id": str(int(time.time() * 1000)),
+                }
             )
+            
+            if media:
+                logger.info(f"   ✅ Reel uploaded (no music attached)! ID: {media.pk}")
+                logger.warning("   ⚠️  Music was NOT attached — Instagram music methods failed")
+                return {
+                    "id": media.pk,
+                    "code": media.code,
+                    "status": "uploaded_no_music",
+                    "music_track": None,
+                    "music_artist": None,
+                }
+        except Exception as e:
+            errors.append(f"clip_upload: {str(e)[:80]}")
+            logger.error(f"   ❌ Method 3 also failed: {e}")
+    
+    # All methods failed
+    error_summary = " | ".join(errors)
+    raise RuntimeError(f"All upload methods failed: {error_summary}")
 
 
 if __name__ == "__main__":
