@@ -40,15 +40,16 @@ REEL_HEIGHT = 1920
 DEFAULT_DURATION = 15
 DEFAULT_FPS = 30
 
-# Ken Burns zoom range
+# Ken Burns zoom range — bigger range = more dynamic movement
 ZOOM_START = 1.0
-ZOOM_END = 1.15
+ZOOM_END = 1.30
 
-# Vignette strength (0 = none, 1 = max)
-VIGNETTE_STRENGTH = 0.55
+# Vignette strength (0 = none, 1 = max) — lighter now
+VIGNETTE_STRENGTH = 0.35
 
-# Text readability gradient (dark overlay at center for quote legibility)
-TEXT_DARKEN_OPACITY = 0.50
+# Text safe area margins (pixels from each edge)
+TEXT_MARGIN_X = 100
+TEXT_MARGIN_Y = 200
 
 
 # ─── Color Grading Themes ─────────────────────────────────────────────────────
@@ -219,12 +220,8 @@ def apply_color_matrix_np(frame, theme_key):
 def wrap_quote_text(text, max_chars_per_line=28):
     """
     Wrap quote text for screen display.
-    Uses 28 chars per line to stay within Instagram's safe zone.
-    
-    Instagram's UI overlay zones:
-      - Top 12%: Reels header, camera icon
-      - Bottom 28%: Username, music credit, like/comment/share, caption
-    Safe zone for text: 12% to 68% from top (about 230px to 1310px)
+    Returns a list of lines, each within the max character limit.
+    Uses 28 chars per line — balanced between readability and fitting on screen.
     """
     words = text.split()
     lines = []
@@ -242,7 +239,7 @@ def wrap_quote_text(text, max_chars_per_line=28):
     if current_line:
         lines.append(current_line)
     
-    # Safety: limit to 6 lines max (safe zone is limited)
+    # Safety: limit to 6 lines max to avoid vertical overflow
     if len(lines) > 6:
         while len(lines) > 5:
             last = lines.pop()
@@ -268,35 +265,37 @@ def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     author_fontname = font_paths.get("author", "Montserrat")
     
     num_lines = len(lines)
-    total_text_lines = num_lines + 1
-    line_height = 50
-    total_height = total_text_lines * line_height
-    # Position text in Instagram's safe zone (12%-68% from top)
-    # Target: center the text block around 40% from top = 768px
-    target_center = int(1920 * 0.40)  # 768px
-    start_y = target_center - (total_height // 2)
-    start_y = max(start_y, 230)  # Don't go above 12%
+    line_height = 48
+    total_text_height = num_lines * line_height
+    # Center vertically — position quote block in safe area
+    # Safe area: 25%-70% of screen height (480-1344 px)
+    safe_top = int(1920 * 0.25)
+    safe_bottom = int(1920 * 0.70)
+    safe_center = (safe_top + safe_bottom) // 2
+    block_start_y = safe_center - total_text_height // 2
     
-    # Fade timing
-    quote_start = "0:00:00.80"
+    # Fade timing — simple and clean
+    quote_start = "0:00:00.50"
     quote_end = "0:00:13.50"
-    author_start = "0:00:01.80"
+    author_start = "0:00:01.20"
     author_end = "0:00:13.50"
     
-    quote_fade = r"{\fade(255,255,0,0,80,1250,1350)}"
-    author_fade = r"{\fade(255,255,0,0,180,1250,1350)}"
+    quote_fade = r"{\fade(255,255,0,0,50,800,1200)}"
+    author_fade = r"{\fade(255,255,0,0,120,800,1200)}"
     
-    # Dynamic font size based on quote length
-    # Conservative sizes to stay within Instagram's safe zone
+    # Dynamic font size — smaller to prevent cutoff
     num_chars = len(quote_text)
     if num_chars <= 50:
-        q_font_size = 40
+        q_font_size = 38
     elif num_chars <= 80:
-        q_font_size = 36
+        q_font_size = 34
     elif num_chars <= 120:
-        q_font_size = 32
+        q_font_size = 30
     else:
         q_font_size = 28
+    
+    # Margins — generous horizontal margins for safe area
+    margin_lr = 100  # 100px on each side = text in 880px wide area
     
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
@@ -307,8 +306,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,2,0,1,3,3,8,80,80,{start_y},1
-Style: Author,{author_fontname},24,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,2,8,80,80,{start_y + num_lines * 50 + 20},1
+Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H20000000,&H80000000,-1,0,0,0,100,100,1,0,1,2,4,8,{margin_lr},{margin_lr},{block_start_y},1
+Style: Author,{author_fontname},22,&H80FFFFFF,&H000000FF,&H20000000,&H80000000,0,-1,0,0,100,100,1,0,1,1,3,8,{margin_lr},{margin_lr},{block_start_y + num_lines * line_height + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -351,9 +350,8 @@ def _create_text_backdrop(width, height, duration):
     
     img = np.zeros((height, width, 4), dtype=np.uint8)
     
-    # Match the Instagram safe zone (12%-68% from top)
-    center_y_start = int(height * 0.12)
-    center_y_end = int(height * 0.68)
+    center_y_start = int(height * 0.25)
+    center_y_end = int(height * 0.75)
     center_y_mid = (center_y_start + center_y_end) // 2
     
     for y in range(center_y_start, center_y_end):
@@ -425,16 +423,14 @@ def _create_dust_particles(width, height, duration, num_particles=30):
 
 def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, duration=15, theme_key=None):
     """
-    Create a cinematic reel using MoviePy for smoother effects.
+    Create a cinematic reel using MoviePy.
     
-    Enhanced features:
-    - Ken Burns zoom with randomized direction
+    Clean design:
+    - Ken Burns zoom/pan with dramatic movement
     - Color grading with cinematic themes
-    - Dark text backdrop for guaranteed readability
-    - Floating dust particles for cinematic atmosphere
-    - Cinematic vignette overlay
-    - Native text clips with precise fade timing
-    - Audio crossfade with configurable curves
+    - Light vignette only
+    - Centered text with safe-area margins
+    - Simple fade in/out
     """
     import numpy as np
     from PIL import Image
@@ -454,10 +450,10 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     bg_img = bg_img.resize((REEL_WIDTH, REEL_HEIGHT), Image.LANCZOS)
     bg_array = np.array(bg_img)
     
-    # Randomize Ken Burns direction
-    kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down"])
+    # Randomize Ken Burns direction — more dramatic movement
+    kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down", "drift_left", "drift_right"])
     
-    # Ken Burns zoom: smooth ease-in-out + color grading
+    # Ken Burns: smooth ease-in-out + color grading
     def make_ken_burns_frame(t):
         progress = t / duration
         smooth = progress * progress * (3 - 2 * progress)
@@ -477,21 +473,35 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
             x1 = (w - new_w) // 2
             y1 = (h - new_h) // 2
         elif kb_mode == "pan_up":
-            zoom = 1.08
+            zoom = 1.15
             new_w = int(w / zoom)
             new_h = int(h / zoom)
             x1 = (w - new_w) // 2
             max_y = h - new_h
             y1 = int(max_y * (1.0 - smooth))
         elif kb_mode == "pan_down":
-            zoom = 1.08
+            zoom = 1.15
             new_w = int(w / zoom)
             new_h = int(h / zoom)
             x1 = (w - new_w) // 2
             max_y = h - new_h
             y1 = int(max_y * smooth)
+        elif kb_mode == "drift_left":
+            zoom = 1.20
+            new_w = int(w / zoom)
+            new_h = int(h / zoom)
+            max_x = w - new_w
+            x1 = int(max_x * (1.0 - smooth))
+            y1 = (h - new_h) // 2
+        elif kb_mode == "drift_right":
+            zoom = 1.20
+            new_w = int(w / zoom)
+            new_h = int(h / zoom)
+            max_x = w - new_w
+            x1 = int(max_x * smooth)
+            y1 = (h - new_h) // 2
         else:
-            zoom = 1.0 + 0.12 * smooth
+            zoom = 1.0 + 0.20 * smooth
             new_w = int(w / zoom)
             new_h = int(h / zoom)
             x1 = (w - new_w) // 2
@@ -510,18 +520,10 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     
     zoomed_clip = VideoClip(frame_function=make_ken_burns_frame, duration=duration)
     
-    # Build composite layers
+    # Build composite layers — CLEAN: only vignette + text
     clips = [zoomed_clip]
     
-    # Layer 1: Text backdrop
-    try:
-        backdrop = _create_text_backdrop(REEL_WIDTH, REEL_HEIGHT, duration)
-        backdrop = backdrop.with_position(("center", "center"))
-        clips.append(backdrop)
-    except Exception as e:
-        print(f"   Text backdrop skipped: {e}")
-    
-    # Layer 2: Vignette overlay
+    # Layer 1: Light vignette overlay only
     try:
         vignette = _create_vignette_clip(REEL_WIDTH, REEL_HEIGHT, duration)
         vignette = vignette.with_position(("center", "center"))
@@ -529,75 +531,76 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     except Exception as e:
         print(f"   Vignette skipped: {e}")
     
-    # Layer 3: Dust particles
-    try:
-        num_particles = random.randint(15, 40)
-        dust = _create_dust_particles(REEL_WIDTH, REEL_HEIGHT, duration, num_particles)
-        clips.append(dust)
-    except Exception as e:
-        print(f"   Dust particles skipped: {e}")
-    
-    # Layer 4: Text overlays
+    # Layer 2: Text overlays — clean, no double wrapping
     try:
         quote_text = quote["text"]
         author = quote["author"]
         
-        lines = wrap_quote_text(quote_text, max_chars_per_line=28)
-        wrapped = "\n".join(lines)
+        # Use the quote text directly — let TextClip's caption method handle wrapping
+        # Only pre-wrap if the text is very long
+        num_chars = len(quote_text)
         
         quote_font = font_paths.get("quote", "Cormorant-Garamond")
         author_font = font_paths.get("author", "Montserrat")
         
-        # Dynamic font sizing: conservative sizes for Instagram safe zone
-        num_lines = len(lines)
-        if num_lines <= 2:
-            q_font_size = 42
-        elif num_lines <= 3:
-            q_font_size = 36
-        elif num_lines <= 4:
-            q_font_size = 32
+        # Dynamic font sizing — smaller to prevent cutoff
+        # Text width = 880px (1080 - 2*100 margin)
+        text_width = REEL_WIDTH - 2 * TEXT_MARGIN_X
+        
+        if num_chars <= 50:
+            q_font_size = 38
+        elif num_chars <= 80:
+            q_font_size = 34
+        elif num_chars <= 120:
+            q_font_size = 30
         else:
             q_font_size = 28
         
-        # Instagram safe zone: 12%-68% from top
-        est_block_height = num_lines * (q_font_size * 1.3)
-        block_center_rel = 0.40
-        block_height_rel = est_block_height / REEL_HEIGHT
-        quote_y = block_center_rel - (block_height_rel / 2)
-        quote_y = max(quote_y, 0.14)
-        max_quote_y = 0.60 - block_height_rel
-        quote_y = min(quote_y, max(0.14, max_quote_y))
+        # Estimate number of lines for vertical positioning
+        est_chars_per_line = int(text_width / (q_font_size * 0.55))
+        est_lines = max(1, (num_chars // est_chars_per_line) + 1)
         
-        # Quote text — width 900px (leave 90px margin each side)
+        # Smart vertical positioning: center the text block in the safe area
+        # Safe area: 25%-70% of screen height
+        if est_lines <= 2:
+            quote_y = 0.38
+        elif est_lines <= 3:
+            quote_y = 0.33
+        elif est_lines <= 4:
+            quote_y = 0.28
+        else:
+            quote_y = 0.24
+        
+        # Quote text — pass raw text, let caption method wrap it
         quote_clip = TextClip(
-            text=wrapped,
+            text=quote_text,
             font_size=q_font_size,
             color="white",
             font=quote_font,
             text_align="center",
-            size=(900, None),
+            size=(text_width, None),
             method="caption",
         )
         quote_clip = quote_clip.with_duration(duration - 1.5)
         quote_clip = quote_clip.with_position(("center", quote_y), relative=True)
-        quote_clip = quote_clip.with_effects([FadeIn(1.0), FadeOut(2.0)])
+        quote_clip = quote_clip.with_effects([FadeIn(0.8), FadeOut(1.5)])
         clips.append(quote_clip)
         
-        # Author text — capped at 62% to avoid IG bottom UI overlay
-        author_y = min(quote_y + block_height_rel + 0.02, 0.62)
+        # Author text — positioned below quote
+        author_y = min(quote_y + 0.05 * est_lines + 0.08, 0.68)
         
         author_clip = TextClip(
-            text=f"\u2014 {author}",
+            text=f"— {author}",
             font_size=22,
-            color="#CCCCCC",
+            color="#BBBBBB",
             font=author_font,
             text_align="center",
-            size=(900, None),
+            size=(text_width, None),
             method="caption",
         )
         author_clip = author_clip.with_duration(duration - 3.0)
         author_clip = author_clip.with_position(("center", author_y), relative=True)
-        author_clip = author_clip.with_effects([FadeIn(0.8), FadeOut(2.0)])
+        author_clip = author_clip.with_effects([FadeIn(0.6), FadeOut(1.5)])
         clips.append(author_clip)
         
     except Exception as e:
@@ -616,7 +619,7 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
             repeats = int(duration / audio.duration) + 1
             audio = concatenate_audioclips([audio] * repeats)
         audio = audio.subclipped(0, min(duration, audio.duration))
-        audio = audio.with_effects([AudioFadeIn(1.5), AudioFadeOut(3.0)])
+        audio = audio.with_effects([AudioFadeIn(1.0), AudioFadeOut(2.0)])
         video = video.with_audio(audio)
     
     print(f"   MoviePy: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}, theme={theme_name}...")
@@ -689,14 +692,17 @@ def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, dura
     
     fps = DEFAULT_FPS
     total_frames = duration * fps
-    zoom_increment = 0.12 / total_frames
+    zoom_increment = 0.25 / total_frames  # Bigger zoom range = more dynamic
     
-    kb_mode = random.choice(["zoom_in", "zoom_out"])
+    # More dynamic Ken Burns modes for FFmpeg
+    kb_mode = random.choice(["zoom_in", "zoom_out", "zoom_in_fast"])
     
     if kb_mode == "zoom_in":
         zoom_expr = f"1+{zoom_increment}*on"
-    else:
-        zoom_expr = f"1.12-{zoom_increment}*on"
+    elif kb_mode == "zoom_out":
+        zoom_expr = f"1.25-{zoom_increment}*on"
+    else:  # zoom_in_fast — starts slow, accelerates
+        zoom_expr = f"1+0.0002*on*on/on"
     
     vignette_path = _generate_vignette_png(temp_dir)
     
@@ -843,8 +849,8 @@ def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15
     """
     Create a 15-second Instagram Reel video.
     
-    Tries MoviePy first (smoother zoom, vignette, dust particles, text backdrop),
-    falls back to enhanced FFmpeg pipeline if MoviePy fails.
+    Tries MoviePy first (Ken Burns zoom, vignette, color grading, text),
+    falls back to FFmpeg pipeline if MoviePy fails.
     
     Args:
         image_path: Path to the background image
