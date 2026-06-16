@@ -5,6 +5,7 @@ on:
     # Trigger at 5:30 PM IST = 12:00 UTC (IST = UTC+5:30)
     # The smart scheduler will calculate the best time and wait
     # This gives a window from 5:30 PM to 11 PM IST for optimal posting
+    # Runs every day including Sunday (rest day = summary only)
     - cron: '0 12 * * *'
   
   # Allow manual trigger for testing
@@ -66,7 +67,7 @@ jobs:
         run: |
           python3 src/main.py
 
-      - name: 💾 Save performance & music data
+      - name: 💾 Save performance, music & schedule data
         if: always()
         run: |
           git config --global user.name "InnerLogic Bot"
@@ -79,7 +80,16 @@ jobs:
             git add data/music_history.json
             echo "Music history staged"
           fi
-          git diff --cached --quiet || git commit -m "📊 Update performance & music data"
+          if [ -f data/schedule_state.json ]; then
+            git add data/schedule_state.json
+            echo "Schedule state staged"
+          fi
+          # Save weekly summaries
+          if [ -d data/weekly_summaries ]; then
+            git add data/weekly_summaries/
+            echo "Weekly summaries staged"
+          fi
+          git diff --cached --quiet || git commit -m "📊 Update performance, music & schedule data"
           git push
           echo "Data saved"
 

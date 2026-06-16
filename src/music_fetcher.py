@@ -55,6 +55,10 @@ def _is_recently_used(key, value, history):
         return value in history.get("recent_mixkit_ids", [])
     elif key == "style":
         return value in history.get("recent_styles", [])
+    elif key == "freesound_id":
+        return value in history.get("recent_freesound_ids", [])
+    elif key == "insta_track_id":
+        return value in history.get("recent_insta_track_ids", [])
     return False
 
 
@@ -70,6 +74,14 @@ def _mark_used(key, value, history):
     elif key == "style":
         history.setdefault("recent_styles", []).append(value)
         history["recent_styles"] = history["recent_styles"][-max_history:]
+    elif key == "freesound_id":
+        history.setdefault("recent_freesound_ids", []).append(value)
+        history["recent_freesound_ids"] = history["recent_freesound_ids"][-max_history:]
+    elif key == "insta_track_id":
+        history.setdefault("recent_insta_track_ids", []).append(value)
+        history["recent_insta_track_ids"] = history["recent_insta_track_ids"][-max_history:]
+        history.setdefault("recent_insta_track_names", []).append(str(value))
+        history["recent_insta_track_names"] = history["recent_insta_track_names"][-max_history:]
     _save_history(history)
 
 
@@ -821,6 +833,42 @@ def fetch_music(api_key, temp_dir, freesound_token=""):
     # Absolute last resort
     print("   All music methods failed — video will have silent audio")
     return None
+
+
+# ─── AI Day Entry Point (FFmpeg Only) ────────────────────────────────────────
+
+def fetch_ai_music(temp_dir, duration=16):
+    """
+    Fetch music for AI days using FFmpeg generation ONLY.
+    
+    No external APIs, no downloads — purely synthesized cinematic music.
+    10 unique styles with randomized parameters = infinite variety.
+    
+    This is used on Mon/Wed/Fri (AI Days) in the weekly schedule.
+    
+    Args:
+        temp_dir: Directory to save the music file
+        duration: Duration in seconds (default 16 for 15s reel + 1s buffer)
+    
+    Returns:
+        tuple: (music_path, music_detail) or (None, None) on failure
+    """
+    history = _load_history()
+    
+    print("   🤖 AI Day — Generating original music with FFmpeg...")
+    result = generate_ambient_music(temp_dir, duration=duration, history=history)
+    
+    if result:
+        # Determine which style was used for the detail string
+        recent_styles = history.get("recent_styles", [])
+        style_name = recent_styles[-1] if recent_styles else "unknown"
+        style_info = MUSIC_STYLES.get(style_name, {"name": "Unknown", "mood": ""})
+        music_detail = f"FFmpeg: {style_info['name']}"
+        return result, music_detail
+    
+    # Absolute last resort — silent
+    print("   ⚠️ FFmpeg generation failed — creating silent audio")
+    return None, None
 
 
 if __name__ == "__main__":

@@ -41,3 +41,4 @@ fonts/*.otf
 # Tokens & sessions (NEVER commit these!)
 temp_token.txt
 data/ig_session.json
+data/ig_session_partial.json
