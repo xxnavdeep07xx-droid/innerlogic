@@ -286,16 +286,17 @@ def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     # Dynamic font size — smaller to prevent cutoff
     num_chars = len(quote_text)
     if num_chars <= 50:
-        q_font_size = 38
+        q_font_size = 36
     elif num_chars <= 80:
-        q_font_size = 34
+        q_font_size = 32
     elif num_chars <= 120:
-        q_font_size = 30
-    else:
         q_font_size = 28
+    else:
+        q_font_size = 26
     
     # Margins — generous horizontal margins for safe area
-    margin_lr = 100  # 100px on each side = text in 880px wide area
+    # 150px each side = text in 780px wide area
+    margin_lr = 150
     
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
@@ -531,49 +532,52 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     except Exception as e:
         print(f"   Vignette skipped: {e}")
     
-    # Layer 2: Text overlays — clean, no double wrapping
+    # Layer 2: Text overlays — pre-wrapped for guaranteed fit
     try:
         quote_text = quote["text"]
         author = quote["author"]
         
-        # Use the quote text directly — let TextClip's caption method handle wrapping
-        # Only pre-wrap if the text is very long
-        num_chars = len(quote_text)
-        
         quote_font = font_paths.get("quote", "Cormorant-Garamond")
         author_font = font_paths.get("author", "Montserrat")
         
-        # Dynamic font sizing — smaller to prevent cutoff
-        # Text width = 880px (1080 - 2*100 margin)
-        text_width = REEL_WIDTH - 2 * TEXT_MARGIN_X
+        # Text container: 780px wide = 150px margin each side
+        # This is narrow enough that even with font rendering variations,
+        # text will NEVER extend beyond screen edges
+        text_width = 780
         
+        num_chars = len(quote_text)
+        
+        # Dynamic font sizing — conservative to prevent any cutoff
         if num_chars <= 50:
-            q_font_size = 38
+            q_font_size = 36
         elif num_chars <= 80:
-            q_font_size = 34
+            q_font_size = 32
         elif num_chars <= 120:
-            q_font_size = 30
-        else:
             q_font_size = 28
-        
-        # Estimate number of lines for vertical positioning
-        est_chars_per_line = int(text_width / (q_font_size * 0.55))
-        est_lines = max(1, (num_chars // est_chars_per_line) + 1)
-        
-        # Smart vertical positioning: center the text block in the safe area
-        # Safe area: 25%-70% of screen height
-        if est_lines <= 2:
-            quote_y = 0.38
-        elif est_lines <= 3:
-            quote_y = 0.33
-        elif est_lines <= 4:
-            quote_y = 0.28
         else:
-            quote_y = 0.24
+            q_font_size = 26
         
-        # Quote text — pass raw text, let caption method wrap it
+        # Pre-wrap the text ourselves — this is the ONLY reliable way
+        # to guarantee text fits within the container width.
+        # MoviePy's caption method can overflow; our wrapping is precise.
+        chars_per_line = int(text_width / (q_font_size * 0.52))  # conservative estimate
+        lines = wrap_quote_text(quote_text, max_chars_per_line=chars_per_line)
+        wrapped = "\n".join(lines)
+        num_lines = len(lines)
+        
+        # Smart vertical positioning based on actual line count
+        if num_lines <= 2:
+            quote_y = 0.36
+        elif num_lines <= 3:
+            quote_y = 0.32
+        elif num_lines <= 4:
+            quote_y = 0.27
+        else:
+            quote_y = 0.23
+        
+        # Quote text — pre-wrapped, caption method just renders it
         quote_clip = TextClip(
-            text=quote_text,
+            text=wrapped,
             font_size=q_font_size,
             color="white",
             font=quote_font,
@@ -586,9 +590,8 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_clip = quote_clip.with_effects([FadeIn(0.8), FadeOut(1.5)])
         clips.append(quote_clip)
         
-        # Author text — positioned below quote, safely within 65% vertical limit
-        # Instagram UI overlay starts ~72% from top, so keep author well above that
-        author_y = min(quote_y + 0.04 * est_lines + 0.06, 0.62)
+        # Author text — positioned below quote, safely within safe zone
+        author_y = min(quote_y + 0.04 * num_lines + 0.06, 0.60)
         
         author_clip = TextClip(
             text=f"— {author}",
