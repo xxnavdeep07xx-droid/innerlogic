@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://www.youtube.com/watch?v=39jtb0uCvRA",
+    "name": "How to Add Music to Instagram Posts and Reels - YouTube",
+    "snippet": "how to easily add sound to an Instagram post and reel directly from the Instagram ... LinkedIn: https://www.linkedin.com/company/trymirage ...",
+    "host_name": "www.youtube.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/subzeroid/instagrapi",
+    "name": "GitHub - subzeroid/instagrapi: The fastest and powerful Python",
+    "snippet": "Fast and effective unofficial Instagram API wrapper for Python. instagrapi combines public web and private mobile API flows, for users, media, stories, direct ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://subzeroid.github.io/instagrapi/usage-guide/media.html",
+    "name": "Media | instagrapi - GitHub Pages",
+    "snippet": "The fastest and powerful Python library for Instagram Private API 2026 downloading, uploading and editing publications. Upload a Reel with music metadata ...",
+    "host_name": "subzeroid.github.io",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.linkedin.com/posts/kunal1601_python-automation-instagramapi-activity-7369070429635825664-WYYZ",
+    "name": "How to Post on Instagram with Python Using Instagrapi - LinkedIn",
+    "snippet": "With the instagrapi library, you can upload photos, videos, or reels straight from your script. Step 1: Install Instagrapi Run: pip install ...",
+    "host_name": "www.linkedin.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://jenessastark.medium.com/3-ways-to-add-music-when-auto-publishing-instagram-reels-c7fb5a1ac8fd",
+    "name": "3 Ways to Add Music When Auto-Publishing Instagram Reels",
+    "snippet": "Option 1: Use the Audio in Your Video Editing Tool. Simply put, there is no third-party tool that lets you choose your Reels music from ...",
+    "host_name": "jenessastark.medium.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=0H5CF2pNhDw",
+    "name": "How to Add Music to Instagram Reels (3 ways) - YouTube",
+    "snippet": "Elevate your Instagram Reels game with this comprehensive tutorial showcasing three dynamic methods to add music. Whether you're looking to ...",
+    "host_name": "www.youtube.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://postproxy.dev/blog/instagram-reels-api-publishing-guide",
+    "name": "Instagram Reels API Publishing Guide (2026) - Postproxy",
+    "snippet": "You cannot add Instagram's music library tracks through the API. No trending sounds, no catalogue music, no sound effects from Instagram's ...",
+    "host_name": "postproxy.dev",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.quora.com/How-do-I-add-music-to-an-Instagram-Reel",
+    "name": "How to add music to an Instagram Reel - Quora",
+    "snippet": "You can add music to your Instagram Stories by clicking on the “media” icon (square smiley face - used to add GIFs and emojis) and then ...",
+    "host_name": "www.quora.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://instagrapi.com",
+    "name": "instagrapi — Python library for Instagram Private API",
+    "snippet": "Open-source Python library for Instagram Private API. Login, post photos, stories, reels, DMs, follow, fetch user media. MIT licensed.",
+    "host_name": "instagrapi.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://about.instagram.com/blog/tips-and-tricks/how-to-add-music-to-instagram-reels",
+    "name": "Adding Music or Original Audio to Instagram Reels",
+    "snippet": "Learn how to easily add music or audio to your Instagram Reels to make your content more engaging and dynamic.",
+    "host_name": "about.instagram.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

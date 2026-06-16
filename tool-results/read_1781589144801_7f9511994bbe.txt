@@ -1,0 +1,719 @@
+     1→#!/usr/bin/env python3
+     2→"""
+     3→Music Fetcher — Downloads royalty-free cinematic music for reels.
+     4→
+     5→5-Tier Strategy (in order of quality & variety):
+     6→1. Pixabay API    — thousands of real tracks (needs free API key)
+     7→2. Mixkit SFX     — 20+ atmospheric/ambient tracks, free, no auth (WAV)
+     8→3. Pixabay CDN    — 2 verified working direct MP3 links (no key needed)
+     9→4. FFmpeg Ambient — 10 unique generated styles with infinite variations
+    10→5. Silent audio   — last resort (never actually silent thanks to Tier 4)
+    11→
+    12→Track History: Rotates through sources to avoid repeating the same track.
+    13→"""
+    14→
+    15→import requests
+    16→import random
+    17→import os
+    18→import subprocess
+    19→import json
+    20→import time
+    21→
+    22→
+    23→# ─── Track History ────────────────────────────────────────────────────────────
+    24→# Tracks recently used URLs/IDs to avoid repeats across consecutive posts
+    25→HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "music_history.json")
+    26→
+    27→
+    28→def _load_history():
+    29→    """Load recently used music tracks."""
+    30→    try:
+    31→        if os.path.exists(HISTORY_FILE):
+    32→            with open(HISTORY_FILE, "r") as f:
+    33→                return json.load(f)
+    34→    except Exception:
+    35→        pass
+    36→    return {"recent_urls": [], "recent_mixkit_ids": [], "recent_styles": []}
+    37→
+    38→
+    39→def _save_history(history):
+    40→    """Save recently used music tracks."""
+    41→    try:
+    42→        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+    43→        with open(HISTORY_FILE, "w") as f:
+    44→            json.dump(history, f, indent=2)
+    45→    except Exception:
+    46→        pass
+    47→
+    48→
+    49→def _is_recently_used(key, value, history):
+    50→    """Check if a specific track was used recently."""
+    51→    if key == "url":
+    52→        return value in history.get("recent_urls", [])
+    53→    elif key == "mixkit_id":
+    54→        return value in history.get("recent_mixkit_ids", [])
+    55→    elif key == "style":
+    56→        return value in history.get("recent_styles", [])
+    57→    return False
+    58→
+    59→
+    60→def _mark_used(key, value, history):
+    61→    """Mark a track as recently used and trim old entries."""
+    62→    max_history = 5  # Remember last 5 tracks per category
+    63→    if key == "url":
+    64→        history.setdefault("recent_urls", []).append(value)
+    65→        history["recent_urls"] = history["recent_urls"][-max_history:]
+    66→    elif key == "mixkit_id":
+    67→        history.setdefault("recent_mixkit_ids", []).append(value)
+    68→        history["recent_mixkit_ids"] = history["recent_mixkit_ids"][-max_history:]
+    69→    elif key == "style":
+    70→        history.setdefault("recent_styles", []).append(value)
+    71→        history["recent_styles"] = history["recent_styles"][-max_history:]
+    72→    _save_history(history)
+    73→
+    74→
+    75→# ─── Mixkit SFX Library ──────────────────────────────────────────────────────
+    76→# Free atmospheric/cinematic sound effects from Mixkit (no auth needed)
+    77→# These are WAV files verified to work with direct download
+    78→# Duration and mood verified by testing
+    79→MIXKIT_TRACKS = [
+    80→    # Long atmospheric tracks (30s+)
+    81→    {"id": 350,  "duration": 85,  "mood": "cinematic_atmosphere",  "desc": "Deep cinematic atmosphere"},
+    82→    {"id": 800,  "duration": 98,  "mood": "dark_ambient",          "desc": "Dark ambient soundscape"},
+    83→    {"id": 1900, "duration": 112, "mood": "epic_cinematic",        "desc": "Epic cinematic texture"},
+    84→    {"id": 300,  "duration": 40,  "mood": "dark_cinematic",        "desc": "Dark cinematic ambience"},
+    85→    {"id": 1250, "duration": 39,  "mood": "suspense_atmosphere",   "desc": "Suspenseful atmosphere"},
+    86→    # Medium atmospheric tracks (15-30s)
+    87→    {"id": 450,  "duration": 30,  "mood": "cinematic_tension",     "desc": "Cinematic tension build"},
+    88→    {"id": 850,  "duration": 29,  "mood": "mysterious_ambient",    "desc": "Mysterious ambient pad"},
+    89→    {"id": 1050, "duration": 31,  "mood": "dark_atmosphere",       "desc": "Dark atmospheric texture"},
+    90→    {"id": 1200, "duration": 30,  "mood": "philosophical_ambient", "desc": "Philosophical ambience"},
+    91→    {"id": 1000, "duration": 25,  "mood": "melancholic_drone",     "desc": "Melancholic drone"},
+    92→    {"id": 1600, "duration": 25,  "mood": "ethereal_pad",          "desc": "Ethereal pad texture"},
+    93→    {"id": 700,  "duration": 16,  "mood": "dark_transition",       "desc": "Dark transition hit"},
+    94→    # Shorter cinematic accents (10-15s) — still useful for 15s reels
+    95→    {"id": 313,  "duration": 17,  "mood": "dramatic_hit",          "desc": "Dramatic impact"},
+    96→    {"id": 325,  "duration": 45,  "mood": "dark_dronescape",       "desc": "Dark droning soundscape"},
+    97→    {"id": 326,  "duration": 24,  "mood": "eerie_ambient",         "desc": "Eerie ambient texture"},
+    98→    {"id": 304,  "duration": 15,  "mood": "cinematic_hit",         "desc": "Cinematic bass hit"},
+    99→    {"id": 310,  "duration": 18,  "mood": "deep_rumble",           "desc": "Deep bass rumble"},
+   100→    {"id": 312,  "duration": 22,  "mood": "dark_pad",              "desc": "Dark synth pad"},
+   101→    {"id": 341,  "duration": 14,  "mood": "suspense_rise",         "desc": "Suspense rising tone"},
+   102→    {"id": 346,  "duration": 80,  "mood": "ambient_flow",          "desc": "Flowing ambient texture"},
+   103→    {"id": 347,  "duration": 60,  "mood": "meditative_drone",      "desc": "Meditative deep drone"},
+   104→]
+   105→
+   106→
+   107→# ─── Pixabay CDN URLs (verified working) ──────────────────────────────────────
+   108→PIXABAY_CDN_URLS = [
+   109→    # ~147s - Cinematic Ambient (large, full track)
+   110→    "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3",
+   111→    # ~110s - Dark Cinematic Piano (large, full track)
+   112→    "https://cdn.pixabay.com/audio/2022/01/18/audio_d0a13f69d2.mp3",
+   113→]
+   114→
+   115→
+   116→# ─── FFmpeg Music Styles ─────────────────────────────────────────────────────
+   117→# Each style produces unique music every time thanks to randomized parameters.
+   118→
+   119→MUSIC_STYLES = {
+   120→    "dark_drone": {
+   121→        "name": "Dark Drone",
+   122→        "mood": "Deep sub-bass with harmonic overtones and noise texture",
+   123→    },
+   124→    "cinematic_piano": {
+   125→        "name": "Cinematic Piano",
+   126→        "mood": "Minor key arpeggio with reverb-like echo",
+   127→    },
+   128→    "melodic_ambient": {
+   129→        "name": "Melodic Ambient",
+   130→        "mood": "Layered minor scale with warm filtering",
+   131→    },
+   132→    "tension_build": {
+   133→        "name": "Tension Build",
+   134→        "mood": "Rising frequencies creating psychological tension",
+   135→    },
+   136→    "ethereal_pad": {
+   137→        "name": "Ethereal Pad",
+   138→        "mood": "Soft sustained chords with slow evolution",
+   139→    },
+   140→    "deep_space": {
+   141→        "name": "Deep Space",
+   142→        "mood": "Vast cosmic ambience with slow pulsing tones",
+   143→    },
+   144→    "rain_meditation": {
+   145→        "name": "Rain Meditation",
+   146→        "mood": "Gentle rain-like texture with soft melodic undertones",
+   147→    },
+   148→    "suspense_pulse": {
+   149→        "name": "Suspense Pulse",
+   150→        "mood": "Rhythmic low pulse with eerie high harmonics",
+   151→    },
+   152→    "nostalgic_dream": {
+   153→        "name": "Nostalgic Dream",
+   154→        "mood": "Bittersweet chord progression with echo decay",
+   155→    },
+   156→    "void_ambience": {
+   157→        "name": "Void Ambience",
+   158→        "mood": "Empty space texture with distant resonant frequencies",
+   159→    },
+   160→}
+   161→
+   162→
+   163→def _build_ffmpeg_dark_drone(duration):
+   164→    """Generate a dark ambient drone with sub-bass, harmonics & noise texture."""
+   165→    base = random.choice([36, 40, 44, 49, 55])
+   166→    return [
+   167→        "ffmpeg", "-y",
+   168→        "-f", "lavfi", "-i", f"sine=frequency={base}:duration={duration}",
+   169→        "-f", "lavfi", "-i", f"sine=frequency={int(base*1.5)}:duration={duration}",
+   170→        "-f", "lavfi", "-i", f"sine=frequency={base*2}:duration={duration}",
+   171→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=pink:r=44100:a=0.02",
+   172→        "-filter_complex",
+   173→        f"[0:a]volume=0.3[bass];[1:a]volume=0.15[mid];[2:a]volume=0.08[high];"
+   174→        f"[bass][mid][high][3:a]amix=inputs=4:duration=longest,"
+   175→        f"lowpass=f=400,aecho=0.8:0.9:80:0.3,volume=0.3,"
+   176→        f"afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4",
+   177→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   178→    ]
+   179→
+   180→
+   181→def _build_ffmpeg_cinematic_piano(duration):
+   182→    """Generate a cinematic piano-like arpeggio with echo/reverb."""
+   183→    keys = {
+   184→        "Am": [220, 261, 329, 440],
+   185→        "Dm": [293, 349, 440, 587],
+   186→        "Em": [164, 196, 246, 329],
+   187→        "Fm": [174, 207, 261, 349],
+   188→        "Gm": [196, 233, 293, 392],
+   189→        "Bbm": [233, 277, 349, 466],
+   190→        "Cm": [261, 311, 392, 523],
+   191→    }
+   192→    key_name = random.choice(list(keys.keys()))
+   193→    notes = keys[key_name]
+   194→    
+   195→    return [
+   196→        "ffmpeg", "-y",
+   197→        "-f", "lavfi", "-i", f"sine=frequency={notes[0]}:duration={duration}",
+   198→        "-f", "lavfi", "-i", f"sine=frequency={notes[1]}:duration={duration}",
+   199→        "-f", "lavfi", "-i", f"sine=frequency={notes[2]}:duration={duration}",
+   200→        "-f", "lavfi", "-i", f"sine=frequency={notes[3]}:duration={duration}",
+   201→        "-filter_complex",
+   202→        f"[0:a]volume=0.15[a0];[1:a]volume=0.12[a1];[2:a]volume=0.10[a2];[3:a]volume=0.08[a3];"
+   203→        f"[a0][a1][a2][a3]amix=inputs=4:duration=longest,"
+   204→        f"lowpass=f=2000,highpass=f=150,"
+   205→        f"aecho=0.8:0.88:60:0.4,aecho=0.8:0.88:120:0.2,"
+   206→        f"volume=0.35,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+   207→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   208→    ]
+   209→
+   210→
+   211→def _build_ffmpeg_melodic_ambient(duration):
+   212→    """Generate layered minor scale with warm filtering and echo."""
+   213→    base = random.choice([130, 146, 164, 174, 196])
+   214→    notes = [base, int(base*1.2), int(base*1.5), int(base*1.8)]
+   215→    
+   216→    return [
+   217→        "ffmpeg", "-y",
+   218→        "-f", "lavfi", "-i", f"sine=frequency={notes[0]}:duration={duration}",
+   219→        "-f", "lavfi", "-i", f"sine=frequency={notes[1]}:duration={duration}",
+   220→        "-f", "lavfi", "-i", f"sine=frequency={notes[2]}:duration={duration}",
+   221→        "-f", "lavfi", "-i", f"sine=frequency={notes[3]}:duration={duration}",
+   222→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.01",
+   223→        "-filter_complex",
+   224→        f"[0:a]volume=0.12[n0];[1:a]volume=0.10[n1];[2:a]volume=0.10[n2];[3:a]volume=0.08[n3];"
+   225→        f"[n0][n1][n2][n3][4:a]amix=inputs=5:duration=longest,"
+   226→        f"lowpass=f=800,highpass=f=80,"
+   227→        f"aecho=0.7:0.85:100:0.35,aecho=0.7:0.85:200:0.15,"
+   228→        f"volume=0.3,afade=t=in:st=0:d=2.5,afade=t=out:st={duration-4}:d=4",
+   229→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   230→    ]
+   231→
+   232→
+   233→def _build_ffmpeg_tension_build(duration):
+   234→    """Generate rising frequencies creating psychological tension."""
+   235→    start_freq = random.choice([40, 50, 60])
+   236→    mid_freq = start_freq * 2
+   237→    end_freq = start_freq * 3
+   238→    
+   239→    return [
+   240→        "ffmpeg", "-y",
+   241→        "-f", "lavfi", "-i", f"sine=frequency={start_freq}:duration={duration}",
+   242→        "-f", "lavfi", "-i", f"sine=frequency={mid_freq}:duration={duration}",
+   243→        "-f", "lavfi", "-i", f"sine=frequency={end_freq}:duration={duration}",
+   244→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=pink:r=44100:a=0.015",
+   245→        "-filter_complex",
+   246→        f"[0:a]volume=0.2[a0];[1:a]volume=0.12[a1];[2:a]volume=0.06[a2];"
+   247→        f"[a0][a1][a2][3:a]amix=inputs=4:duration=longest,"
+   248→        f"lowpass=f=600,"
+   249→        f"volume=0.25,"
+   250→        f"afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+   251→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   252→    ]
+   253→
+   254→
+   255→def _build_ffmpeg_ethereal_pad(duration):
+   256→    """Generate soft sustained chords with slow evolution."""
+   257→    root = random.choice([110, 130, 146, 164])
+   258→    notes = [root, int(root*1.26), int(root*1.5), int(root*2)]
+   259→    
+   260→    return [
+   261→        "ffmpeg", "-y",
+   262→        "-f", "lavfi", "-i", f"sine=frequency={notes[0]}:duration={duration}",
+   263→        "-f", "lavfi", "-i", f"sine=frequency={notes[1]}:duration={duration}",
+   264→        "-f", "lavfi", "-i", f"sine=frequency={notes[2]}:duration={duration}",
+   265→        "-f", "lavfi", "-i", f"sine=frequency={notes[3]}:duration={duration}",
+   266→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.008",
+   267→        "-filter_complex",
+   268→        f"[0:a]volume=0.10[e0];[1:a]volume=0.08[e1];[2:a]volume=0.08[e2];[3:a]volume=0.06[e3];"
+   269→        f"[e0][e1][e2][e3][4:a]amix=inputs=5:duration=longest,"
+   270→        f"lowpass=f=500,highpass=f=60,"
+   271→        f"aecho=0.9:0.92:150:0.4,"
+   272→        f"volume=0.28,afade=t=in:st=0:d=3.5,afade=t=out:st={duration-4}:d=4",
+   273→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   274→    ]
+   275→
+   276→
+   277→def _build_ffmpeg_deep_space(duration):
+   278→    """Generate vast cosmic ambience with slow pulsing tones."""
+   279→    base = random.choice([27, 30, 33, 36, 40])
+   280→    pulse = random.choice([0.05, 0.08, 0.1])
+   281→    return [
+   282→        "ffmpeg", "-y",
+   283→        "-f", "lavfi", "-i", f"sine=frequency={base}:duration={duration}",
+   284→        "-f", "lavfi", "-i", f"sine=frequency={int(base*2)}:duration={duration}",
+   285→        "-f", "lavfi", "-i", f"sine=frequency={int(base*3)}:duration={duration}",
+   286→        "-f", "lavfi", "-i", f"sine=frequency={int(base*4)}:duration={duration}",
+   287→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.015",
+   288→        "-filter_complex",
+   289→        f"[0:a]volume=0.25[s0];[1:a]volume=0.12[s1];[2:a]volume=0.06[s2];[3:a]volume=0.03[s3];"
+   290→        f"[s0][s1][s2][s3][4:a]amix=inputs=5:duration=longest,"
+   291→        f"lowpass=f=300,highpass=f=20,"
+   292→        f"aecho=0.9:0.95:200:0.5,aecho=0.8:0.9:400:0.3,"
+   293→        f"volume=0.3,afade=t=in:st=0:d=4,afade=t=out:st={duration-5}:d=5",
+   294→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   295→    ]
+   296→
+   297→
+   298→def _build_ffmpeg_rain_meditation(duration):
+   299→    """Generate gentle rain-like texture with soft melodic undertones."""
+   300→    base = random.choice([196, 220, 246, 261, 293])
+   301→    return [
+   302→        "ffmpeg", "-y",
+   303→        "-f", "lavfi", "-i", f"sine=frequency={base}:duration={duration}",
+   304→        "-f", "lavfi", "-i", f"sine=frequency={int(base*1.5)}:duration={duration}",
+   305→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=white:r=44100:a=0.04",
+   306→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.03",
+   307→        "-filter_complex",
+   308→        f"[0:a]volume=0.08[r0];[1:a]volume=0.06[r1];"
+   309→        f"[2:a]lowpass=f=3000[vn];[3:a]lowpass=f=800[bn];"
+   310→        f"[r0][r1][vn][bn]amix=inputs=4:duration=longest,"
+   311→        f"lowpass=f=2500,highpass=f=100,"
+   312→        f"volume=0.3,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+   313→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   314→    ]
+   315→
+   316→
+   317→def _build_ffmpeg_suspense_pulse(duration):
+   318→    """Generate rhythmic low pulse with eerie high harmonics."""
+   319→    base = random.choice([55, 62, 73, 82])
+   320→    harmonic = random.choice([base*4, base*5, base*6])
+   321→    return [
+   322→        "ffmpeg", "-y",
+   323→        "-f", "lavfi", "-i", f"sine=frequency={base}:duration={duration}",
+   324→        "-f", "lavfi", "-i", f"sine=frequency={int(harmonic)}:duration={duration}",
+   325→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=pink:r=44100:a=0.01",
+   326→        "-filter_complex",
+   327→        f"[0:a]volume=0.2[p0];[1:a]volume=0.04[p1];"
+   328→        f"[p0][p1][2:a]amix=inputs=3:duration=longest,"
+   329→        f"lowpass=f=500,highpass=f=30,"
+   330→        f"acompressor=threshold=0.1:ratio=4:attack=0.01:release=0.5,"
+   331→        f"volume=0.3,afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3",
+   332→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   333→    ]
+   334→
+   335→
+   336→def _build_ffmpeg_nostalgic_dream(duration):
+   337→    """Generate bittersweet chord progression with echo decay."""
+   338→    # Diminished or minor 7th chords for bittersweet feel
+   339→    root = random.choice([146, 164, 174, 196, 220])
+   340→    notes = [root, int(root*1.2), int(root*1.5), int(root*1.78)]
+   341→    return [
+   342→        "ffmpeg", "-y",
+   343→        "-f", "lavfi", "-i", f"sine=frequency={notes[0]}:duration={duration}",
+   344→        "-f", "lavfi", "-i", f"sine=frequency={notes[1]}:duration={duration}",
+   345→        "-f", "lavfi", "-i", f"sine=frequency={notes[2]}:duration={duration}",
+   346→        "-f", "lavfi", "-i", f"sine=frequency={notes[3]}:duration={duration}",
+   347→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.012",
+   348→        "-filter_complex",
+   349→        f"[0:a]volume=0.10[d0];[1:a]volume=0.08[d1];[2:a]volume=0.09[d2];[3:a]volume=0.06[d3];"
+   350→        f"[d0][d1][d2][d3][4:a]amix=inputs=5:duration=longest,"
+   351→        f"lowpass=f=1200,highpass=f=100,"
+   352→        f"aecho=0.85:0.9:80:0.45,aecho=0.8:0.88:160:0.25,aecho=0.75:0.85:320:0.1,"
+   353→        f"volume=0.3,afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4",
+   354→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   355→    ]
+   356→
+   357→
+   358→def _build_ffmpeg_void_ambience(duration):
+   359→    """Generate empty space texture with distant resonant frequencies."""
+   360→    base = random.choice([22, 25, 28, 31])
+   361→    return [
+   362→        "ffmpeg", "-y",
+   363→        "-f", "lavfi", "-i", f"sine=frequency={base}:duration={duration}",
+   364→        "-f", "lavfi", "-i", f"sine=frequency={int(base*8)}:duration={duration}",
+   365→        "-f", "lavfi", "-i", f"anoisesrc=d={duration}:c=brown:r=44100:a=0.02",
+   366→        "-filter_complex",
+   367→        f"[0:a]volume=0.2[v0];[1:a]volume=0.02[v1];"
+   368→        f"[v0][v1][2:a]amix=inputs=3:duration=longest,"
+   369→        f"lowpass=f=200,highpass=f=15,"
+   370→        f"aecho=0.95:0.97:300:0.6,"
+   371→        f"volume=0.25,afade=t=in:st=0:d=5,afade=t=out:st={duration-5}:d=5",
+   372→        "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
+   373→    ]
+   374→
+   375→
+   376→# Map style names to builder functions
+   377→STYLE_BUILDERS = {
+   378→    "dark_drone": _build_ffmpeg_dark_drone,
+   379→    "cinematic_piano": _build_ffmpeg_cinematic_piano,
+   380→    "melodic_ambient": _build_ffmpeg_melodic_ambient,
+   381→    "tension_build": _build_ffmpeg_tension_build,
+   382→    "ethereal_pad": _build_ffmpeg_ethereal_pad,
+   383→    "deep_space": _build_ffmpeg_deep_space,
+   384→    "rain_meditation": _build_ffmpeg_rain_meditation,
+   385→    "suspense_pulse": _build_ffmpeg_suspense_pulse,
+   386→    "nostalgic_dream": _build_ffmpeg_nostalgic_dream,
+   387→    "void_ambience": _build_ffmpeg_void_ambience,
+   388→}
+   389→
+   390→
+   391→# ─── Helper Functions ─────────────────────────────────────────────────────────
+   392→
+   393→def _download_file(url, output_path, timeout=60):
+   394→    """Download a file from URL to local path."""
+   395→    response = requests.get(url, timeout=timeout, stream=True)
+   396→    response.raise_for_status()
+   397→    with open(output_path, "wb") as f:
+   398→        for chunk in response.iter_content(chunk_size=8192):
+   399→            f.write(chunk)
+   400→    return output_path
+   401→
+   402→
+   403→def _convert_wav_to_mp3(wav_path, mp3_path):
+   404→    """Convert WAV to MP3 using FFmpeg (smaller file, Instagram compatible)."""
+   405→    try:
+   406→        cmd = [
+   407→            "ffmpeg", "-y",
+   408→            "-i", wav_path,
+   409→            "-c:a", "libmp3lame", "-b:a", "128k",
+   410→            mp3_path
+   411→        ]
+   412→        result = subprocess.run(cmd, capture_output=True, timeout=30)
+   413→        if result.returncode == 0 and os.path.exists(mp3_path):
+   414→            os.remove(wav_path)  # Clean up WAV
+   415→            return True
+   416→    except Exception:
+   417→        pass
+   418→    return False
+   419→
+   420→
+   421→# ─── Tier 1: Pixabay API ─────────────────────────────────────────────────────
+   422→
+   423→def fetch_music_pixabay_api(api_key, temp_dir, history=None):
+   424→    """
+   425→    Search and download music from Pixabay API.
+   426→    Free API key at: https://pixabay.com/api/docs/
+   427→    Returns thousands of real cinematic/ambient tracks.
+   428→    """
+   429→    if not api_key or not api_key.strip():
+   430→        return None
+   431→    
+   432→    search_terms = [
+   433→        "dark cinematic ambient",
+   434→        "cinematic piano emotional",
+   435→        "dark atmospheric",
+   436→        "melancholic strings",
+   437→        "epic dark cinematic",
+   438→        "sad piano",
+   439→        "philosophical ambient",
+   440→        "dark drone",
+   441→        "cinematic slow",
+   442→        "mysterious dark",
+   443→        "ambient cinematic dark",
+   444→        "dark background",
+   445→        "emotional cinematic",
+   446→        "atmospheric dark piano",
+   447→    ]
+   448→    search_term = random.choice(search_terms)
+   449→    
+   450→    try:
+   451→        params = {
+   452→            "key": api_key,
+   453→            "q": search_term,
+   454→            "category": "music",
+   455→            "per_page": 50,
+   456→            "safesearch": "true",
+   457→        }
+   458→        
+   459→        response = requests.get("https://pixabay.com/api/", params=params, timeout=30)
+   460→        response.raise_for_status()
+   461→        data = response.json()
+   462→        
+   463→        hits = data.get("hits", [])
+   464→        if not hits:
+   465→            print(f"   No Pixabay results for '{search_term}'")
+   466→            return None
+   467→        
+   468→        # Pick a random track
+   469→        hit = random.choice(hits)
+   470→        
+   471→        # Try to get the audio download URL
+   472→        audio_url = None
+   473→        for field in ["audiodownload", "audio", "previewURL", "downloadURL"]:
+   474→            if hit.get(field):
+   475→                audio_url = hit[field]
+   476→                break
+   477→        
+   478→        if audio_url:
+   479→            output_path = os.path.join(temp_dir, "background_music.mp3")
+   480→            _download_file(audio_url, output_path, timeout=60)
+   481→            file_size = os.path.getsize(output_path)
+   482→            if file_size > 50000:
+   483→                print(f"   Pixabay API music downloaded ({file_size/1024:.0f} KB, search: {search_term})")
+   484→                if history:
+   485→                    _mark_used("url", audio_url, history)
+   486→                return output_path
+   487→        
+   488→        print(f"   Pixabay hit had no download URL")
+   489→        
+   490→    except Exception as e:
+   491→        print(f"   Pixabay API error: {e}")
+   492→    
+   493→    return None
+   494→
+   495→
+   496→# ─── Tier 2: Mixkit SFX ──────────────────────────────────────────────────────
+   497→
+   498→def fetch_music_mixkit(temp_dir, history=None):
+   499→    """
+   500→    Download atmospheric/cinematic audio from Mixkit (free, no auth).
+   501→    20+ tracks with different moods and durations.
+   502→    WAV files are auto-converted to MP3 for Instagram compatibility.
+   503→    """
+   504→    tracks = MIXKIT_TRACKS.copy()
+   505→    
+   506→    # Filter out recently used tracks
+   507→    if history:
+   508→        recent_ids = history.get("recent_mixkit_ids", [])
+   509→        fresh_tracks = [t for t in tracks if t["id"] not in recent_ids]
+   510→        if fresh_tracks:
+   511→            tracks = fresh_tracks
+   512→    
+   513→    random.shuffle(tracks)
+   514→    
+   515→    for track in tracks[:5]:  # Try up to 5 tracks
+   516→        mixkit_id = track["id"]
+   517→        url = f"https://assets.mixkit.co/active_storage/sfx/{mixkit_id}/{mixkit_id}.wav"
+   518→        wav_path = os.path.join(temp_dir, "background_music_raw.wav")
+   519→        mp3_path = os.path.join(temp_dir, "background_music.mp3")
+   520→        
+   521→        try:
+   522→            print(f"   Mixkit: downloading '{track['desc']}' (ID={mixkit_id}, ~{track['duration']}s)")
+   523→            _download_file(url, wav_path, timeout=90)
+   524→            file_size = os.path.getsize(wav_path)
+   525→            
+   526→            if file_size < 50000:
+   527→                print(f"   File too small ({file_size/1024:.0f} KB), trying next...")
+   528→                os.remove(wav_path)
+   529→                continue
+   530→            
+   531→            # Convert WAV to MP3 for smaller size & Instagram compatibility
+   532→            if _convert_wav_to_mp3(wav_path, mp3_path):
+   533→                final_size = os.path.getsize(mp3_path)
+   534→                print(f"   Mixkit music ready ({final_size/1024:.0f} KB, mood: {track['mood']})")
+   535→                if history:
+   536→                    _mark_used("mixkit_id", mixkit_id, history)
+   537→                return mp3_path
+   538→            else:
+   539→                # If conversion fails, try using WAV directly
+   540→                os.rename(wav_path, mp3_path)
+   541→                print(f"   Mixkit music ready (WAV, mood: {track['mood']})")
+   542→                if history:
+   543→                    _mark_used("mixkit_id", mixkit_id, history)
+   544→                return mp3_path
+   545→                
+   546→        except Exception as e:
+   547→            print(f"   Mixkit download failed (ID={mixkit_id}): {e}")
+   548→    
+   549→    return None
+   550→
+   551→
+   552→# ─── Tier 3: Pixabay CDN ─────────────────────────────────────────────────────
+   553→
+   554→def fetch_music_pixabay_cdn(temp_dir, history=None):
+   555→    """Download music from verified working Pixabay CDN URLs."""
+   556→    urls = PIXABAY_CDN_URLS.copy()
+   557→    
+   558→    # Filter out recently used
+   559→    if history:
+   560→        recent = history.get("recent_urls", [])
+   561→        fresh_urls = [u for u in urls if u not in recent]
+   562→        if fresh_urls:
+   563→            urls = fresh_urls
+   564→    
+   565→    random.shuffle(urls)
+   566→    
+   567→    for url in urls:
+   568→        output_path = os.path.join(temp_dir, "background_music.mp3")
+   569→        try:
+   570→            print(f"   Pixabay CDN: trying {url.split('/')[-1]}")
+   571→            _download_file(url, output_path, timeout=60)
+   572→            file_size = os.path.getsize(output_path)
+   573→            if file_size > 50000:
+   574→                print(f"   Pixabay CDN music downloaded ({file_size/1024:.0f} KB)")
+   575→                if history:
+   576→                    _mark_used("url", url, history)
+   577→                return output_path
+   578→            else:
+   579→                print(f"   File too small, trying next...")
+   580→                os.remove(output_path)
+   581→        except Exception as e:
+   582→            print(f"   CDN download failed: {e}")
+   583→    
+   584→    return None
+   585→
+   586→
+   587→# ─── Tier 4: FFmpeg Generated Music ──────────────────────────────────────────
+   588→
+   589→def generate_ambient_music(temp_dir, duration=16, history=None):
+   590→    """
+   591→    Generate cinematic ambient music using FFmpeg.
+   592→    
+   593→    10 unique styles with randomized parameters = every reel sounds different:
+   594→      - Dark Drone: Deep sub-bass with harmonic overtones
+   595→      - Cinematic Piano: Minor key arpeggio with reverb echo
+   596→      - Melodic Ambient: Layered minor scale with warm filtering
+   597→      - Tension Build: Rising frequencies for psychological intensity
+   598→      - Ethereal Pad: Soft sustained chords, dreamy and meditative
+   599→      - Deep Space: Vast cosmic ambience with slow pulsing tones
+   600→      - Rain Meditation: Rain-like texture with soft melodic undertones
+   601→      - Suspense Pulse: Rhythmic low pulse with eerie high harmonics
+   602→      - Nostalgic Dream: Bittersweet chords with echo decay
+   603→      - Void Ambience: Empty space with distant resonant frequencies
+   604→    """
+   605→    output_path = os.path.join(temp_dir, "background_music.mp3")
+   606→    
+   607→    try:
+   608→        # Pick a style, avoiding recently used ones
+   609→        available_styles = list(STYLE_BUILDERS.keys())
+   610→        if history:
+   611→            recent_styles = history.get("recent_styles", [])
+   612→            fresh_styles = [s for s in available_styles if s not in recent_styles]
+   613→            if fresh_styles:
+   614→                available_styles = fresh_styles
+   615→        
+   616→        style_name = random.choice(available_styles)
+   617→        style_info = MUSIC_STYLES[style_name]
+   618→        builder = STYLE_BUILDERS[style_name]
+   619→        
+   620→        cmd = builder(duration)
+   621→        cmd.append(output_path)
+   622→        
+   623→        result = subprocess.run(cmd, capture_output=True, timeout=30)
+   624→        
+   625→        if result.returncode == 0 and os.path.exists(output_path):
+   626→            file_size = os.path.getsize(output_path)
+   627→            print(f"   Generated '{style_info['name']}' music ({file_size/1024:.0f} KB)")
+   628→            print(f"   Mood: {style_info['mood']}")
+   629→            if history:
+   630→                _mark_used("style", style_name, history)
+   631→            return output_path
+   632→        else:
+   633→            print(f"   FFmpeg generation failed for style '{style_name}'")
+   634→            if result.stderr:
+   635→                # Print last line of stderr for debugging
+   636→                stderr_text = result.stderr.decode('utf-8', errors='replace')
+   637→                last_line = stderr_text.strip().split('\n')[-1] if stderr_text.strip() else ""
+   638→                if last_line:
+   639→                    print(f"   Error: {last_line}")
+   640→            
+   641→    except Exception as e:
+   642→        print(f"   Music generation error: {e}")
+   643→    
+   644→    return None
+   645→
+   646→
+   647→# ─── Main Entry Point ────────────────────────────────────────────────────────
+   648→
+   649→def fetch_music(api_key, temp_dir):
+   650→    """
+   651→    Main music fetching function with 5-tier fallback.
+   652→    
+   653→    Priority:
+   654→    1. Pixabay API (thousands of real tracks) — needs free API key
+   655→    2. Mixkit SFX (20+ atmospheric tracks) — free, no auth, WAV→MP3
+   656→    3. Pixabay CDN (2 verified working URLs) — no key needed
+   657→    4. FFmpeg Ambient (10 unique styles, infinite variety) — always works
+   658→    5. Silent audio — absolute last resort
+   659→    
+   660→    Track History: Remembers recently used tracks to avoid repeats.
+   661→    
+   662→    Args:
+   663→        api_key: Pixabay API key (get free at https://pixabay.com/api/docs/)
+   664→        temp_dir: Directory to save the music file
+   665→    
+   666→    Returns:
+   667→        str: Path to the music file (always returns something)
+   668→    """
+   669→    history = _load_history()
+   670→    
+   671→    # Tier 1: Pixabay API (best variety + real music)
+   672→    if api_key and api_key.strip():
+   673→        print("   [Tier 1/4] Trying Pixabay API...")
+   674→        result = fetch_music_pixabay_api(api_key, temp_dir, history)
+   675→        if result:
+   676→            return result
+   677→    
+   678→    # Tier 2: Mixkit SFX (20+ atmospheric tracks, free)
+   679→    print("   [Tier 2/4] Trying Mixkit free music library...")
+   680→    result = fetch_music_mixkit(temp_dir, history)
+   681→    if result:
+   682→        return result
+   683→    
+   684→    # Tier 3: Pixabay CDN (quick fallback)
+   685→    print("   [Tier 3/4] Trying Pixabay CDN fallback...")
+   686→    result = fetch_music_pixabay_cdn(temp_dir, history)
+   687→    if result:
+   688→        return result
+   689→    
+   690→    # Tier 4: FFmpeg generated music (always works, 10 styles)
+   691→    print("   [Tier 4/4] Generating cinematic music with FFmpeg...")
+   692→    result = generate_ambient_music(temp_dir, history=history)
+   693→    if result:
+   694→        return result
+   695→    
+   696→    # Absolute last resort
+   697→    print("   All music methods failed — video will have silent audio")
+   698→    return None
+   699→
+   700→
+   701→if __name__ == "__main__":
+   702→    os.makedirs("temp", exist_ok=True)
+   703→    
+   704→    # Test with no API key (tests Tiers 2-4)
+   705→    print("=== Testing music fetcher (no API key) ===\n")
+   706→    path = fetch_music("", "temp")
+   707→    print(f"\nMusic saved to: {path}")
+   708→    
+   709→    if path:
+   710→        # Show file info
+   711→        try:
+   712→            result = subprocess.run(
+   713→                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration,size", "-of", "csv=p=0", path],
+   714→                capture_output=True, text=True, timeout=10
+   715→            )
+   716→            print(f"File info: {result.stdout.strip()}")
+   717→        except Exception:
+   718→            pass
+   719→

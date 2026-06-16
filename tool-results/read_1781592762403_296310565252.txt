@@ -1,0 +1,1220 @@
+     1→import contextlib
+     2→import json
+     3→import os
+     4→import tempfile
+     5→import time
+     6→from pathlib import Path
+     7→from typing import Dict, List, Optional, Union
+     8→from uuid import uuid4
+     9→
+    10→from instagrapi import config
+    11→from instagrapi.exceptions import ClientError, ClipConfigureError, ClipNotUpload
+    12→from instagrapi.types import Location, Media, Track, Usertag
+    13→from instagrapi.utils.timing import date_time_original
+    14→from instagrapi.utils.video import MOVIEPY_2_INSTALL_MESSAGE, analyze_video_for_upload
+    15→
+    16→try:
+    17→    from PIL import Image
+    18→except ImportError:
+    19→    raise Exception("You don't have PIL installed. Please install PIL or Pillow>=8.1.1")
+    20→
+    21→
+    22→def _make_tmp_path(suffix: str) -> str:
+    23→    """Create a uniquely-named tempfile path safely.
+    24→
+    25→    ``tempfile.mktemp`` is deprecated and prone to TOCTOU races. We
+    26→    use ``mkstemp`` to atomically create the file under a unique
+    27→    name, then close the file descriptor — the path is reserved and
+    28→    safe for the caller to reopen.
+    29→    """
+    30→    fd, path = tempfile.mkstemp(suffix=suffix)
+    31→    os.close(fd)
+    32→    return path
+    33→
+    34→
+    35→CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_CLIENT_DOC_ID = "216179630714134719310007237117"
+    36→CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_FRIENDLY_NAME = "CrosspostingUnifiedConfigsQuery"
+    37→CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_ROOT_FIELD = "xcxp_unified_crossposting_configs_root"
+    38→CLIP_FB_STORY_CROSSPOSTING_SURFACE = {
+    39→    "source_surface": "STORY",
+    40→    "destination_app": "FB",
+    41→    "destination_surface": "STORY",
+    42→}
+    43→CLIP_FB_FEED_CROSSPOSTING_SURFACE = {
+    44→    "source_surface": "FEED",
+    45→    "destination_app": "FB",
+    46→    "destination_surface": "FEED",
+    47→}
+    48→CLIP_FB_REELS_CROSSPOSTING_SURFACE = {
+    49→    "source_surface": "REELS",
+    50→    "destination_app": "FB",
+    51→    "destination_surface": "REELS",
+    52→}
+    53→CLIP_FB_CROSSPOSTING_SURFACES = [
+    54→    CLIP_FB_STORY_CROSSPOSTING_SURFACE,
+    55→    CLIP_FB_FEED_CROSSPOSTING_SURFACE,
+    56→    CLIP_FB_REELS_CROSSPOSTING_SURFACE,
+    57→]
+    58→CLIP_FB_CROSSPOSTING_SURFACE_FALLBACKS = [
+    59→    [CLIP_FB_REELS_CROSSPOSTING_SURFACE],
+    60→    [
+    61→        CLIP_FB_REELS_CROSSPOSTING_SURFACE,
+    62→        CLIP_FB_STORY_CROSSPOSTING_SURFACE,
+    63→        CLIP_FB_FEED_CROSSPOSTING_SURFACE,
+    64→    ],
+    65→]
+    66→
+    67→
+    68→class ClipMixin:
+    69→    """
+    70→    Helpers for CLIP/Reel actions
+    71→    """
+    72→
+    73→    def _raise_clip_upload_error(self, response, stage: str) -> None:
+    74→        self.last_response = response
+    75→        status_code = getattr(response, "status_code", None)
+    76→        response_text = getattr(response, "text", "") or ""
+    77→        error_response = {}
+    78→        try:
+    79→            parsed = response.json()
+    80→        except Exception:
+    81→            parsed = None
+    82→        if isinstance(parsed, dict):
+    83→            error_response = parsed
+    84→            self.last_json = parsed
+    85→        else:
+    86→            self.last_json = {}
+    87→        details = response_text or error_response
+    88→        raise ClipNotUpload(
+    89→            f"Clip upload failed during {stage}: HTTP {status_code}: {details}",
+    90→            response=response,
+    91→            stage=stage,
+    92→            status_code=status_code,
+    93→            error_response=error_response,
+    94→            response_text=response_text,
+    95→        )
+    96→
+    97→    def clip_mashup_info(self, media_pk: str) -> Dict:
+    98→        """
+    99→        Fetch Reel remix/reuse availability metadata.
+   100→
+   101→        Parameters
+   102→        ----------
+   103→        media_pk: str
+   104→            PK for the Reel
+   105→
+   106→        Returns
+   107→        -------
+   108→        Dict
+   109→            A dictionary of response from the call
+   110→        """
+   111→        assert self.user_id, "Login required"
+   112→        return self.private_request(
+   113→            "clips/get_mashup_info_for_media/",
+   114→            data={
+   115→                "media_id": str(media_pk),
+   116→                "_uid": str(self.user_id),
+   117→                "_uuid": self.uuid,
+   118→            },
+   119→        )
+   120→
+   121→    def clip_seen(self, media_ids: List[str], blend_media_ids: Optional[List[str]] = None) -> bool:
+   122→        """
+   123→        Mark Clips/Reels as seen using Instagram's Clips seen-state endpoint.
+   124→
+   125→        Parameters
+   126→        ----------
+   127→        media_ids: List[str]
+   128→            Clip/Reel media ids or pks.
+   129→        blend_media_ids: List[str], optional
+   130→            Clip/Reel media ids or pks seen from Blend surfaces.
+   131→
+   132→        Returns
+   133→        -------
+   134→        bool
+   135→            A boolean value
+   136→        """
+   137→        assert self.user_id, "Login required"
+   138→        media_pks = [self.media_pk(media_id) for media_id in media_ids]
+   139→        blend_media_pks = [self.media_pk(media_id) for media_id in (blend_media_ids or [])]
+   140→        result = self.private_request(
+   141→            "clips/write_seen_state/",
+   142→            data={
+   143→                "impressions": json.dumps(media_pks, separators=(",", ":")),
+   144→                "_uid": str(self.user_id),
+   145→                "_uuid": self.uuid,
+   146→                "blend_impressions": json.dumps(blend_media_pks, separators=(",", ":")),
+   147→            },
+   148→        )
+   149→        return result.get("status") == "ok"
+   150→
+   151→    def clip_pin(self, media_pk: str, revert: bool = False) -> bool:
+   152→        """
+   153→        Pin Reel to the Reels tab/profile Reels grid
+   154→
+   155→        Parameters
+   156→        ----------
+   157→        media_pk: str
+   158→        revert: bool, optional
+   159→            Unpin when True
+   160→
+   161→        Returns
+   162→        -------
+   163→        bool
+   164→        A boolean value
+   165→        """
+   166→        name = "unpin" if revert else "pin"
+   167→        result = self.private_request(
+   168→            f"users/{name}_timeline_media/",
+   169→            data={"post_id": str(media_pk), "profile_grid": "clips"},
+   170→        )
+   171→        return result["status"] == "ok"
+   172→
+   173→    def clip_unpin(self, media_pk: str) -> bool:
+   174→        """
+   175→        Unpin Reel from the Reels tab/profile Reels grid
+   176→
+   177→        Parameters
+   178→        ----------
+   179→        media_pk: str
+   180→
+   181→        Returns
+   182→        -------
+   183→        bool
+   184→        A boolean value
+   185→        """
+   186→        return self.clip_pin(media_pk, True)
+   187→
+   188→    def clip_change_cover(self, media_pk: str, cover_path: Path) -> bool:
+   189→        """
+   190→        Change cover image for a published Reel
+   191→
+   192→        Parameters
+   193→        ----------
+   194→        media_pk: str
+   195→            PK for the Reel
+   196→        cover_path: Path
+   197→            Path to the new cover image
+   198→
+   199→        Returns
+   200→        -------
+   201→        bool
+   202→        A boolean value
+   203→        """
+   204→        upload_id, _, _ = self.photo_rupload(Path(cover_path))
+   205→        result = self.private_request(
+   206→            "media/configure_to_clips_cover_image/",
+   207→            data={"upload_id": str(upload_id), "clips_media_id": str(media_pk)},
+   208→        )
+   209→        return bool(result.get("success")) or result.get("status") == "ok"
+   210→
+   211→
+   212→class DownloadClipMixin:
+   213→    """
+   214→    Helpers to download CLIP videos
+   215→    """
+   216→
+   217→    def clip_download(self, media_pk: int, folder: Path = "") -> str:
+   218→        """
+   219→        Download CLIP video
+   220→
+   221→        Parameters
+   222→        ----------
+   223→        media_pk: int
+   224→            PK for the album you want to download
+   225→        folder: Path, optional
+   226→            Directory in which you want to download the album,
+   227→            default is "" and will download the files to working
+   228→            directory.
+   229→
+   230→        Returns
+   231→        -------
+   232→        str
+   233→        """
+   234→        return self.video_download(media_pk, folder)
+   235→
+   236→    def clip_download_by_url(self, url: str, filename: str = "", folder: Path = "") -> str:
+   237→        """
+   238→        Download CLIP video using URL
+   239→
+   240→        Parameters
+   241→        ----------
+   242→        url: str
+   243→            URL to download media from
+   244→        folder: Path, optional
+   245→            Directory in which you want to download the album,
+   246→            default is "" and will download the files to working
+   247→            directory.
+   248→
+   249→        Returns
+   250→        -------
+   251→        str
+   252→        """
+   253→        return self.video_download_by_url(url, filename, folder)
+   254→
+   255→
+   256→class UploadClipMixin:
+   257→    """
+   258→    Helpers to upload CLIP videos
+   259→    """
+   260→
+   261→    @staticmethod
+   262→    def _default_video_device_status() -> Dict[str, object]:
+   263→        return {
+   264→            "hw_av1_dec": False,
+   265→            "hw_vp9_dec": False,
+   266→            "hw_avc_dec": False,
+   267→            "10bit_hw_av1_dec": False,
+   268→            "10bit_hw_vp9_dec": False,
+   269→            "is_hlg_supported": False,
+   270→            "chip_vendor": "others",
+   271→            "chip_name": "unknown",
+   272→            "core_count": 0,
+   273→            "max_ghz_sum": 0,
+   274→            "min_ghz_sum": 0,
+   275→        }
+   276→
+   277→    def clip_info_for_creation(self, device_status: Optional[Dict[str, object]] = None) -> Dict:
+   278→        """
+   279→        Get Reel creation preflight configuration for the current user.
+   280→
+   281→        Parameters
+   282→        ----------
+   283→        device_status: Dict[str, object], optional
+   284→            Device video capability status sent by the Instagram Android app.
+   285→
+   286→        Returns
+   287→        -------
+   288→        Dict
+   289→            A dictionary of response from the call
+   290→        """
+   291→        device_status = device_status or self._default_video_device_status()
+   292→        return self.private_request(
+   293→            "clips/clips_info_for_creation/",
+   294→            params={"device_status": json.dumps(device_status)},
+   295→        )
+   296→
+   297→    def clip_interest_topics(self) -> List[Dict[str, object]]:
+   298→        """
+   299→        Get Reel topic catalog items accepted by ``clip_upload(..., topics=...)``.
+   300→
+   301→        Returns
+   302→        -------
+   303→        List[Dict]
+   304→            Reel topic dictionaries, each including ``name`` and ``fit_id``.
+   305→        """
+   306→        result = self.private_request(
+   307→            "interest_nux/list_all/",
+   308→            params={"caller": "INTEREST_NUX"},
+   309→            with_signature=False,
+   310→        )
+   311→        return result.get("sub_interests") or []
+   312→
+   313→    def clip_trial_eligible(self) -> bool:
+   314→        """
+   315→        Check whether Reel creation preflight reports Trial Reels enabled.
+   316→
+   317→        Instagram can still reject Trial Reel publishing later during
+   318→        configure, so keep upload-side error handling for backend
+   319→        eligibility decisions.
+   320→
+   321→        Returns
+   322→        -------
+   323→        bool
+   324→            A boolean value
+   325→        """
+   326→        result = self.clip_info_for_creation()
+   327→        trial_config = result.get("trial_config") or {}
+   328→        return bool(trial_config.get("is_enabled"))
+   329→
+   330→    def clip_share_to_fb_config(self, device_status: Optional[Dict[str, object]] = None) -> Dict:
+   331→        """
+   332→        Get Reel Facebook sharing configuration for the current user.
+   333→
+   334→        Parameters
+   335→        ----------
+   336→        device_status: Dict[str, object], optional
+   337→            Device video capability status sent by the Instagram Android app.
+   338→
+   339→        Returns
+   340→        -------
+   341→        Dict
+   342→            A dictionary of response from the call
+   343→        """
+   344→        device_status = device_status or self._default_video_device_status()
+   345→        return self.private_request(
+   346→            "clips/user/share_to_fb_config/",
+   347→            params={"device_status": json.dumps(device_status)},
+   348→        )
+   349→
+   350→    def clip_share_to_fb_unified_config(
+   351→        self,
+   352→        crosspost_app_surface_list: Optional[List[Dict[str, str]]] = None,
+   353→    ) -> Dict:
+   354→        """
+   355→        Get the Android cross-posting unified config used by the Reel composer.
+   356→
+   357→        Returns
+   358→        -------
+   359→        Dict
+   360→            A dictionary of response from the private GraphQL call
+   361→        """
+   362→        variables = {
+   363→            "configs_request": {
+   364→                "source_app": "IG",
+   365→                "crosspost_app_surface_list": crosspost_app_surface_list or CLIP_FB_CROSSPOSTING_SURFACES,
+   366→            }
+   367→        }
+   368→        return self.private_graphql_query_request(
+   369→            friendly_name=CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_FRIENDLY_NAME,
+   370→            root_field_name=CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_ROOT_FIELD,
+   371→            variables=variables,
+   372→            client_doc_id=CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_CLIENT_DOC_ID,
+   373→            priority="u=3, i",
+   374→            extra_headers={"X-FB-RMD": "state=URL_ELIGIBLE"},
+   375→        )
+   376→
+   377→    def _clip_share_to_fb_unified_root(self, config: Dict[str, object]) -> object:
+   378→        data = (config or {}).get("data")
+   379→        if isinstance(data, dict):
+   380→            root = data.get(CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_ROOT_FIELD)
+   381→            if root is not None:
+   382→                return root
+   383→            for key, value in data.items():
+   384→                if CLIP_FB_CROSSPOSTING_UNIFIED_CONFIG_ROOT_FIELD in str(key):
+   385→                    return value
+   386→        return config or {}
+   387→
+   388→    def _clip_share_to_fb_iter_dicts(self, value):
+   389→        if isinstance(value, dict):
+   390→            yield value
+   391→            for child in value.values():
+   392→                yield from self._clip_share_to_fb_iter_dicts(child)
+   393→        elif isinstance(value, list):
+   394→            for child in value:
+   395→                yield from self._clip_share_to_fb_iter_dicts(child)
+   396→
+   397→    def _clip_share_to_fb_candidate_value(self, config: Dict[str, object], keys) -> object:
+   398→        for key in keys:
+   399→            value = config.get(key)
+   400→            if value not in (None, ""):
+   401→                return value
+   402→        return None
+   403→
+   404→    def _clip_share_to_fb_reels_fb_candidate(self, config: Dict[str, object]) -> bool:
+   405→        source_surface = str(config.get("source_surface") or "").upper()
+   406→        destination_surface = str(config.get("destination_surface") or "").upper()
+   407→        destination_app = str(config.get("destination_app") or "").upper()
+   408→        if source_surface and source_surface not in {"REELS", "CLIPS"}:
+   409→            return False
+   410→        if destination_surface and destination_surface not in {"REELS", "CLIPS"}:
+   411→            return False
+   412→        if destination_app and destination_app not in {"FB", "FACEBOOK"}:
+   413→            return False
+   414→        return bool(source_surface or destination_surface or destination_app)
+   415→
+   416→    def _clip_share_to_fb_unified_destination_candidates(self, config: Dict[str, object]):
+   417→        for candidate in self._clip_share_to_fb_iter_dicts(self._clip_share_to_fb_unified_root(config)):
+   418→            if not self._clip_share_to_fb_reels_fb_candidate(candidate):
+   419→                continue
+   420→            merged = dict(candidate)
+   421→            for key in (
+   422→                "destination",
+   423→                "fb_destination",
+   424→                "reels_destination",
+   425→                "crosspost_destination",
+   426→                "crossposting_destination",
+   427→                "xpost_destination",
+   428→            ):
+   429→                nested = candidate.get(key)
+   430→                if isinstance(nested, dict):
+   431→                    merged.update(nested)
+   432→            yield merged
+   433→
+   434→    def _clip_share_to_fb_unified_config_variants(self):
+   435→        yield self.clip_share_to_fb_unified_config()
+   436→        for surface_list in CLIP_FB_CROSSPOSTING_SURFACE_FALLBACKS:
+   437→            yield self.clip_share_to_fb_unified_config(crosspost_app_surface_list=surface_list)
+   438→
+   439→    def clip_share_to_fb_unified_destination(self, config: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+   440→        """
+   441→        Resolve a confirmed Reel Facebook destination from unified config.
+   442→
+   443→        Parameters
+   444→        ----------
+   445→        config: Dict[str, object], optional
+   446→            Response from :meth:`clip_share_to_fb_unified_config`.
+   447→
+   448→        Returns
+   449→        -------
+   450→        Dict[str, object]
+   451→            Normalized destination fields.
+   452→        """
+   453→        unified_configs = (config,) if config is not None else self._clip_share_to_fb_unified_config_variants()
+   454→        for unified_config in unified_configs:
+   455→            for candidate in self._clip_share_to_fb_unified_destination_candidates(unified_config or {}):
+   456→                try:
+   457→                    return self.clip_share_to_fb_destination(config=candidate, use_unified_config=False)
+   458→                except ClientError:
+   459→                    continue
+   460→        raise ClientError("Facebook Reel sharing unified config has no confirmed Reel Facebook destination")
+   461→
+   462→    def clip_share_to_fb_destination(
+   463→        self,
+   464→        config: Optional[Dict[str, object]] = None,
+   465→        destination_id: Optional[str] = None,
+   466→        destination_type: Optional[str] = None,
+   467→        destination_audience_type: Optional[str] = None,
+   468→        validation_check_bypass: Optional[bool] = None,
+   469→        use_unified_config: bool = True,
+   470→    ) -> Dict[str, object]:
+   471→        """
+   472→        Resolve the Facebook Reel sharing destination from confirmed fields.
+   473→
+   474→        This helper reads only destination-shaped fields that are known to map
+   475→        to Reel configure payload fields. It intentionally does not treat
+   476→        generic Account Center/linking identifiers such as ``account_id`` as
+   477→        ``share_to_fb_destination_id``.
+   478→
+   479→        Parameters
+   480→        ----------
+   481→        config: Dict[str, object], optional
+   482→            Facebook cross-posting config. When omitted, this calls
+   483→            :meth:`clip_share_to_fb_config`.
+   484→        destination_id: str, optional
+   485→            Explicit Facebook destination id. Overrides config values.
+   486→        destination_type: str, optional
+   487→            Explicit Facebook destination type, ``USER`` or ``PAGE``.
+   488→            Overrides config values.
+   489→        destination_audience_type: str, optional
+   490→            Explicit Facebook Reels audience type, e.g. ``PUBLIC``.
+   491→        validation_check_bypass: bool, optional
+   492→            Explicit validation bypass flag. Overrides config values.
+   493→        use_unified_config: bool, optional
+   494→            When config is omitted, fall back to the Android cross-posting
+   495→            unified config if the lightweight Reel preflight has no destination.
+   496→
+   497→        Returns
+   498→        -------
+   499→        Dict[str, object]
+   500→            Normalized destination fields.
+   501→        """
+   502→        fb_config = (config if config is not None else self.clip_share_to_fb_config()) or {}
+   503→        if fb_config.get("enabled") is False or fb_config.get("is_account_linked") is False:
+   504→            raise ClientError("Facebook Reel sharing is not enabled or no Facebook account is linked")
+   505→
+   506→        explicit_destination = bool(destination_id or destination_type)
+   507→        destination_id = destination_id or self._clip_share_to_fb_candidate_value(
+   508→            fb_config,
+   509→            (
+   510→                "share_to_fb_destination_id",
+   511→                "reels_destination_id",
+   512→                "crosspost_destination_id",
+   513→                "crossposting_destination_id",
+   514→                "xpost_destination_id",
+   515→                "destination_id",
+   516→            ),
+   517→        )
+   518→        destination_type = destination_type or self._clip_share_to_fb_candidate_value(
+   519→            fb_config,
+   520→            (
+   521→                "share_to_fb_destination_type",
+   522→                "crosspost_destination_type",
+   523→                "crossposting_destination_type",
+   524→                "xpost_destination_type",
+   525→                "destination_type",
+   526→                "posting_type",
+   527→            ),
+   528→        )
+   529→        destination_audience_type = destination_audience_type or self._clip_share_to_fb_candidate_value(
+   530→            fb_config,
+   531→            (
+   532→                "share_to_fb_destination_audience_type",
+   533→                "reels_destination_audience_type",
+   534→                "destination_audience_type",
+   535→                "audience_type",
+   536→            ),
+   537→        )
+   538→        if validation_check_bypass is None:
+   539→            validation_check_bypass = fb_config.get(
+   540→                "reels_cross_app_share_fb_validation_check_bypass",
+   541→                fb_config.get("cross_app_share_fb_validation_check_bypass"),
+   542→            )
+   543→
+   544→        has_destination = bool(destination_id and destination_type)
+   545→        if not has_destination and use_unified_config and config is None and not explicit_destination:
+   546→            try:
+   547→                return self.clip_share_to_fb_unified_destination()
+   548→            except ClientError:
+   549→                pass
+   550→        if fb_config.get("share_to_fb_unavailable") and not has_destination:
+   551→            raise ClientError(
+   552→                "Facebook Reel sharing is unavailable from the Reel preflight response. "
+   553→                "If the Instagram app can still cross-post manually, pass destination_id "
+   554→                "and destination_type explicitly."
+   555→            )
+   556→        if not destination_id:
+   557→            raise ClientError(
+   558→                "Facebook Reel sharing configuration has no destination. "
+   559→                "Link a Facebook account/page in the Instagram app or pass destination_id."
+   560→            )
+   561→        if not destination_type:
+   562→            raise ClientError(
+   563→                "Facebook Reel sharing configuration has no destination type. Pass destination_type as USER or PAGE."
+   564→            )
+   565→        destination_type = str(destination_type).upper()
+   566→        if destination_type not in {"USER", "PAGE"}:
+   567→            raise ClientError(
+   568→                "Facebook Reel sharing destination type must be USER or PAGE. "
+   569→                "Do not pass reels_cross_app_share_type here."
+   570→            )
+   571→
+   572→        destination = {
+   573→            "destination_id": str(destination_id),
+   574→            "destination_type": destination_type,
+   575→        }
+   576→        if destination_audience_type:
+   577→            destination["destination_audience_type"] = str(destination_audience_type)
+   578→        if validation_check_bypass is not None:
+   579→            destination["validation_check_bypass"] = bool(validation_check_bypass)
+   580→        return destination
+   581→
+   582→    def clip_share_to_fb_extra_data(
+   583→        self,
+   584→        config: Optional[Dict[str, object]] = None,
+   585→        destination_id: Optional[str] = None,
+   586→        destination_type: Optional[str] = None,
+   587→        destination_audience_type: Optional[str] = None,
+   588→        xpost_surface: str = "IG_REELS_COMPOSER",
+   589→        validation_check_bypass: Optional[bool] = None,
+   590→        attempt_id: Optional[str] = None,
+   591→    ) -> Dict[str, object]:
+   592→        """
+   593→        Build configure fields for sharing a Reel to Facebook.
+   594→
+   595→        Instagram Android 428 stores Reel Facebook cross-posting in
+   596→        ``XPlatformParams`` fields. The old ``share_to_facebook`` flag alone is
+   597→        not enough for accounts that require an explicit Facebook destination.
+   598→
+   599→        Parameters
+   600→        ----------
+   601→        config: Dict[str, object], optional
+   602→            Facebook cross-posting config. The lightweight
+   603→            ``clip_share_to_fb_config()`` response contains availability flags;
+   604→            app/draft configs can also contain destination fields.
+   605→        destination_id: str, optional
+   606→            Facebook destination id. Overrides config values.
+   607→        destination_type: str, optional
+   608→            Facebook destination type/posting type, ``USER`` or ``PAGE``.
+   609→            Overrides config values.
+   610→        destination_audience_type: str, optional
+   611→            Facebook Reels audience type, e.g. ``PUBLIC``.
+   612→        xpost_surface: str, optional
+   613→            Cross-posting surface reported by the Instagram app.
+   614→        validation_check_bypass: bool, optional
+   615→            Whether to bypass app-side FB validation. Overrides config values.
+   616→        attempt_id: str, optional
+   617→            Cross-post configure attempt id. Generated when omitted.
+   618→
+   619→        Returns
+   620→        -------
+   621→        Dict
+   622→            Extra configure data for ``clip_upload(..., extra_data=...)``.
+   623→        """
+   624→        destination = self.clip_share_to_fb_destination(
+   625→            config=config,
+   626→            destination_id=destination_id,
+   627→            destination_type=destination_type,
+   628→            destination_audience_type=destination_audience_type,
+   629→            validation_check_bypass=validation_check_bypass,
+   630→        )
+   631→        attempt_id = attempt_id or str(uuid4())
+   632→
+   633→        data = {
+   634→            "share_to_facebook": "1",
+   635→            "is_reel_shared_to_fb": True,
+   636→            "share_to_facebook_reels": True,
+   637→            "share_to_fb_destination_id": destination["destination_id"],
+   638→            "share_to_fb_destination_type": destination["destination_type"],
+   639→            "xpost_surface": xpost_surface,
+   640→            "no_token_crosspost": "1",  # nosec B105
+   641→            "attempt_id": attempt_id,
+   642→        }
+   643→        if destination.get("destination_audience_type"):
+   644→            data["share_to_fb_destination_audience_type"] = destination["destination_audience_type"]
+   645→        if destination.get("validation_check_bypass") is not None:
+   646→            data["cross_app_share_fb_validation_check_bypass"] = bool(destination["validation_check_bypass"])
+   647→        return data
+   648→
+   649→    def clip_upload(
+   650→        self,
+   651→        path: Path,
+   652→        caption: str,
+   653→        thumbnail: Path = None,
+   654→        usertags: List[Usertag] = [],
+   655→        location: Location = None,
+   656→        configure_timeout: int = 10,
+   657→        feed_show: str = "1",
+   658→        extra_data: Dict[str, object] = {},
+   659→        trial: bool = False,
+   660→        trial_graduation_strategy: str = "manual",
+   661→        share_to_facebook: bool = False,
+   662→        fb_destination_id: Optional[str] = None,
+   663→        fb_destination_type: Optional[str] = None,
+   664→        fb_destination_audience_type: Optional[str] = None,
+   665→        fb_xpost_surface: str = "IG_REELS_COMPOSER",
+   666→        fb_validation_check_bypass: Optional[bool] = None,
+   667→        topics: Optional[List[Union[str, int]]] = None,
+   668→    ) -> Media:
+   669→        """
+   670→        Upload CLIP to Instagram
+   671→
+   672→        Parameters
+   673→        ----------
+   674→        path: Path
+   675→            Path to CLIP file
+   676→        caption: str
+   677→            Media caption
+   678→        thumbnail: Path, optional
+   679→            Path to thumbnail for CLIP.
+   680→            Default value is None, and it generates a thumbnail
+   681→        usertags: List[Usertag], optional
+   682→            List of users to be tagged on this upload, default is empty list.
+   683→        location: Location, optional
+   684→            Location tag for this upload, default is none
+   685→        configure_timeout: int
+   686→            Timeout between attempt to configure media (set caption, etc), default is 10
+   687→        feed_show: str
+   688→            Show Reel preview in feed/profile grid, default is "1".
+   689→            Forced to "0" for Trial Reels.
+   690→        extra_data: Dict[str, object], optional
+   691→            Dict of extra data, if you need to add your params,
+   692→            like {"disable_comments": 1}.
+   693→        trial: bool, optional
+   694→            Upload as a Trial Reel for eligible accounts, default is False.
+   695→        trial_graduation_strategy: str, optional
+   696→            Trial Reel graduation strategy, default is "manual".
+   697→        share_to_facebook: bool, optional
+   698→            Share this Reel to a linked Facebook account/page, default is False.
+   699→        fb_destination_id: str, optional
+   700→            Facebook destination id used when share_to_facebook is True.
+   701→        fb_destination_type: str, optional
+   702→            Facebook destination type used when share_to_facebook is True,
+   703→            ``USER`` or ``PAGE``.
+   704→        fb_destination_audience_type: str, optional
+   705→            Facebook Reels audience type, e.g. ``PUBLIC``.
+   706→        fb_xpost_surface: str, optional
+   707→            Cross-posting surface reported by the Instagram app.
+   708→        fb_validation_check_bypass: bool, optional
+   709→            Override the validation bypass value from share_to_fb_config.
+   710→        topics: List[str or int], optional
+   711→            Reel topic ids to send as Instagram's ``interest_topics`` configure field.
+   712→
+   713→        Returns
+   714→        -------
+   715→        Media
+   716→            An object of Media class
+   717→        """
+   718→        path = Path(path)
+   719→        if thumbnail is not None:
+   720→            thumbnail = Path(thumbnail)
+   721→        upload_id = str(int(time.time() * 1000))
+   722→        thumbnail, width, height, duration = analyze_video(path, thumbnail)
+   723→        with open(path, "rb") as fp:
+   724→            clip_data = fp.read()
+   725→            clip_len = str(len(clip_data))
+   726→        configure_extra_data = dict(extra_data or {})
+   727→        if share_to_facebook:
+   728→            fb_extra_data = self.clip_share_to_fb_extra_data(
+   729→                destination_id=fb_destination_id,
+   730→                destination_type=fb_destination_type,
+   731→                destination_audience_type=fb_destination_audience_type,
+   732→                xpost_surface=fb_xpost_surface,
+   733→                validation_check_bypass=fb_validation_check_bypass,
+   734→            )
+   735→            configure_extra_data = {**fb_extra_data, **configure_extra_data}
+   736→        if trial:
+   737→            feed_show = "0"
+   738→            configure_extra_data.setdefault(
+   739→                "trial_params",
+   740→                {"graduation_strategy": trial_graduation_strategy},
+   741→            )
+   742→        if topics is not None:
+   743→            configure_extra_data.setdefault("interest_topics", [str(topic) for topic in topics])
+   744→        duration_ms = str(int(duration * 1000))
+   745→        composer_session_id = str(uuid4())
+   746→        asset_id = uuid4().hex[:12].upper()
+   747→        target_id = self.user_id or getattr(self, "_user_id", None)
+   748→        upload_context = {
+   749→            "source_attribution": None,
+   750→            "enable_video_dimension_upscale": False,
+   751→            "source_type": "clips",
+   752→            "quality": "",
+   753→        }
+   754→        if target_id:
+   755→            upload_context["target_id"] = int(target_id)
+   756→        upload_timestamp_ms = upload_id
+   757→        upload_name = "{upload_uuid}-0-{length}-{timestamp}-{timestamp}".format(
+   758→            upload_uuid=uuid4().hex,
+   759→            length=clip_len,
+   760→            timestamp=upload_timestamp_ms,
+   761→        )
+   762→        upload_settings = {
+   763→            "composer_session_id": composer_session_id,
+   764→            "upload_setting_properties": {
+   765→                "upload_settings_version": "v0.1",
+   766→                "codec": {},
+   767→                "context": upload_context,
+   768→                "video": {
+   769→                    "video_height": height,
+   770→                    "video_gop_size_sec": 0,
+   771→                    "video_rotation_angle": 0,
+   772→                    "video_width": width,
+   773→                    "source_video_codec": None,
+   774→                    "video_partial_frame_size_bytes": 0,
+   775→                    "asset_id": asset_id,
+   776→                    "video_key_frame_size_bytes": 0,
+   777→                    "target_duration": int(duration),
+   778→                    "video_original_file_size": int(clip_len),
+   779→                    "video_duration_milliseconds": int(duration_ms),
+   780→                    "audio_bit_rate_bps": -1,
+   781→                    "video_bit_rate_bps": 0,
+   782→                    "audio_codec_type": None,
+   783→                    "video_fps": 30,
+   784→                },
+   785→                "creative_tools": {
+   786→                    "transmuxing_eligible": False,
+   787→                    "transcoding_required": True,
+   788→                },
+   789→                "network": {
+   790→                    "download_latency_connection_quality": "ig_dummy",
+   791→                    "network_connection_name": "ig_dummy",
+   792→                    "download_bandwidth_connection_quality": "ig_dummy",
+   793→                },
+   794→            },
+   795→            "preview_spec": {
+   796→                "spec_version": 1,
+   797→                "video_dur_ms": int(duration_ms),
+   798→                "audio_dur_ms": int(duration_ms),
+   799→            },
+   800→        }
+   801→        upload_settings_data = json.dumps(upload_settings)
+   802→        upload_settings_len = str(len(upload_settings_data.encode("utf-8")))
+   803→        headers = self.private_headers(
+   804→            {
+   805→                "Accept-Encoding": "gzip",
+   806→                "Content-Type": "application/json",
+   807→                "Content-Length": upload_settings_len,
+   808→                "Offset": "0",
+   809→                "X-Entity-Length": upload_settings_len,
+   810→                "X-Entity-Name": "upload_settings",
+   811→                "X-Entity-Type": "application/json",
+   812→                "X_FB_VIDEO_WATERFALL_ID": f"{composer_session_id}_settings",
+   813→            }
+   814→        )
+   815→        response = self.private.post(
+   816→            "https://{domain}/upload_settings/{session_id}".format(
+   817→                domain=config.API_DOMAIN,
+   818→                session_id=composer_session_id,
+   819→            ),
+   820→            data=upload_settings_data,
+   821→            headers=headers,
+   822→        )
+   823→        self.request_log(response)
+   824→        if response.status_code != 200:
+   825→            self._raise_clip_upload_error(response, "upload_settings")
+   826→        rupload_params = {
+   827→            "provenance_metadata": json.dumps({"origin": ["EXTERNAL"]}),
+   828→            "upload_media_height": str(height),
+   829→            "share_type": "reels",
+   830→            "debug_segment_id": "0",
+   831→            "extract_cover_frame": "1",
+   832→            "upload_engine_config_enum": "0",
+   833→            "xsharing_user_ids": "[]",
+   834→            "upload_media_width": str(width),
+   835→            "stella_data": "{}",
+   836→            "is_clips_video": "1",
+   837→            "is_optimistic_upload": "true",
+   838→            "upload_media_duration_ms": duration_ms,
+   839→            "content_tags": "use_default_cover",
+   840→            "upload_id": upload_id,
+   841→            "retry_context": '{"num_reupload":0,"num_step_manual_retry":0,"num_step_auto_retry":0}',
+   842→            "session_id": upload_id,
+   843→            "media_type": "2",
+   844→        }
+   845→        headers = self.private_headers(
+   846→            {
+   847→                "Accept-Encoding": "gzip",
+   848→                "X-Instagram-Rupload-Params": json.dumps(rupload_params),
+   849→                "X_FB_VIDEO_WATERFALL_ID": f"{composer_session_id}_{asset_id}_Mixed_0",
+   850→                "X-Entity-Type": "video/mp4",
+   851→                "Segment-Start-Offset": "0",
+   852→                "Segment-Type": "3",
+   853→            }
+   854→        )
+   855→        response = self.private.get(
+   856→            "https://{domain}/rupload_igvideo/{name}".format(domain=config.API_DOMAIN, name=upload_name),
+   857→            headers=headers,
+   858→        )
+   859→        self.request_log(response)
+   860→        if response.status_code != 200:
+   861→            self._raise_clip_upload_error(response, "rupload_init")
+   862→        headers = {
+   863→            "Offset": "0",
+   864→            "X-Entity-Name": upload_name,
+   865→            "X-Entity-Length": clip_len,
+   866→            "Content-Type": "application/octet-stream",
+   867→            "Content-Length": clip_len,
+   868→            **headers,
+   869→        }
+   870→        response = self.private.post(
+   871→            "https://{domain}/rupload_igvideo/{name}".format(domain=config.API_DOMAIN, name=upload_name),
+   872→            data=clip_data,
+   873→            headers=headers,
+   874→        )
+   875→        self.request_log(response)
+   876→        if response.status_code != 200:
+   877→            self._raise_clip_upload_error(response, "rupload_upload")
+   878→        # CONFIGURE
+   879→        # self.igtv_composer_session_id = self.generate_uuid()  #issue
+   880→        for attempt in range(50):
+   881→            self.logger.debug(f"Attempt #{attempt} to configure CLIP: {path}")
+   882→            time.sleep(configure_timeout)
+   883→            try:
+   884→                configured = self.clip_configure(
+   885→                    upload_id,
+   886→                    thumbnail,
+   887→                    width,
+   888→                    height,
+   889→                    duration,
+   890→                    caption,
+   891→                    usertags,
+   892→                    location,
+   893→                    feed_show,
+   894→                    extra_data=configure_extra_data,
+   895→                )
+   896→            except ClientError as e:
+   897→                if "Transcode not finished yet" in str(e):
+   898→                    """
+   899→                    Response 202 status:
+   900→                    {"message": "Transcode not finished yet.", "status": "fail"}
+   901→                    """
+   902→                    time.sleep(configure_timeout)
+   903→                    continue
+   904→                raise e
+   905→            else:
+   906→                if configured:
+   907→                    self.expose()
+   908→                    return self._extract_configured_media_or_raise(
+   909→                        configured,
+   910→                        ClipConfigureError,
+   911→                        "Clip upload",
+   912→                    )
+   913→        raise ClipConfigureError(response=self.last_response, **self.last_json)
+   914→
+   915→    def clip_upload_as_reel_with_music(
+   916→        self,
+   917→        path: Path,
+   918→        caption: str,
+   919→        track: Track,
+   920→        extra_data: Dict[str, object] = {},
+   921→    ) -> Media:
+   922→        """
+   923→        Upload CLIP as reel with music metadata.
+   924→        It also add the music under the video, therefore a mute video is required.
+   925→
+   926→        If you just want to add music metadata to your reel,
+   927→        just copy the extra data you find here and add it
+   928→        to the extra_data parameter of the clip_upload function.
+   929→
+   930→        Parameters
+   931→        ----------
+   932→        path: Path
+   933→            Path to CLIP file
+   934→        caption: str
+   935→            Media caption
+   936→        track: Track
+   937→            The music track to be added to the video reel
+   938→            use cl.search_music(title)[0].dict()
+   939→
+   940→        extra_data: Dict[str, object], optional
+   941→            Dict of extra data, if you need to add your params, like {"disable_comments": 1}.
+   942→
+   943→        Returns
+   944→        -------
+   945→        Media
+   946→            A Media response from the call
+   947→        """
+   948→        tmpaudio = Path(_make_tmp_path(".m4a"))
+   949→        tmpaudio = self.track_download_by_url(track.uri, "track", tmpaudio.parent)
+   950→        tmpvideo = None
+   951→        try:
+   952→            highlight_start_time = track.highlight_start_times_in_ms[0]
+   953→        except IndexError:
+   954→            highlight_start_time = 0
+   955→        try:
+   956→            from moviepy import AudioFileClip, VideoFileClip
+   957→        except ImportError as exc:
+   958→            raise RuntimeError(
+   959→                f"clip_upload_as_reel_with_music() requires MoviePy 2.2.1. {MOVIEPY_2_INSTALL_MESSAGE}"
+   960→            ) from exc
+   961→        video = None
+   962→        audio_clip = None
+   963→        try:
+   964→            # get all media to create the reel
+   965→            video = VideoFileClip(str(path))
+   966→            audio_clip = AudioFileClip(str(tmpaudio))
+   967→            # set the start time of the audio and create the actual media
+   968→            video_duration = float(video.duration)
+   969→            start = highlight_start_time / 1000
+   970→            end = start + video_duration
+   971→            audio_duration = getattr(audio_clip, "duration", None)
+   972→            if audio_duration:
+   973→                audio_duration = float(audio_duration)
+   974→                if end > audio_duration:
+   975→                    start = max(0.0, audio_duration - video_duration)
+   976→                    end = audio_duration
+   977→            audio_clip = audio_clip.subclipped(start, end)
+   978→            video = video.with_audio(audio_clip)
+   979→            audio_asset_start_time = int(start * 1000)
+   980→            overlap_duration = int((end - start) * 1000)
+   981→            # save the media in tmp folder
+   982→            tmpvideo = Path(_make_tmp_path(".mp4"))
+   983→            video.write_videofile(str(tmpvideo))
+   984→            # create the extra data to upload with it
+   985→            data = self.clip_music_extra_data(
+   986→                track,
+   987→                extra_data=extra_data,
+   988→                audio_asset_start_time=audio_asset_start_time,
+   989→                overlap_duration=overlap_duration,
+   990→                original_volume=0.0,
+   991→            )
+   992→            return self.clip_upload(tmpvideo, caption, extra_data=data)
+   993→        finally:
+   994→            for clip in (video, audio_clip):
+   995→                with contextlib.suppress(AttributeError):
+   996→                    if clip:
+   997→                        clip.close()
+   998→            for tmp_path in (tmpvideo, tmpaudio):
+   999→                with contextlib.suppress(FileNotFoundError):
+  1000→                    if tmp_path:
+  1001→                        tmp_path.unlink()
+  1002→
+  1003→    def clip_music_extra_data(
+  1004→        self,
+  1005→        track: Union[Track, Dict],
+  1006→        extra_data: Dict[str, object] = {},
+  1007→        audio_asset_start_time: Optional[int] = None,
+  1008→        overlap_duration: int = 30000,
+  1009→        original_volume: float = 1.0,
+  1010→        music_volume: float = 1.0,
+  1011→        product: str = "story_camera_clips_v2",
+  1012→        alacorn_session_id: str = "null",
+  1013→    ) -> Dict[str, object]:
+  1014→        """
+  1015→        Build Reel music metadata for ``clip_upload(..., extra_data=...)``.
+  1016→
+  1017→        This helper only adds the metadata fields used by the app configure
+  1018→        request. It does not download or mux audio into the local video file.
+  1019→        """
+  1020→        audio_asset_id = self._track_value(track, "audio_asset_id") or self._track_value(track, "id")
+  1021→        audio_cluster_id = self._track_value(track, "audio_cluster_id")
+  1022→        assert audio_asset_id, "track.audio_asset_id or track.id is required"
+  1023→        assert audio_cluster_id, "track.audio_cluster_id is required"
+  1024→        if audio_asset_start_time is None:
+  1025→            audio_asset_start_time = self._track_highlight_start(track)
+  1026→
+  1027→        artist_name = self._track_value(track, "display_artist") or ""
+  1028→        track_name = self._track_value(track, "title") or ""
+  1029→        data = dict(extra_data or {})
+  1030→        data["clips_audio_metadata"] = {
+  1031→            "original": {"volume_level": original_volume},
+  1032→            "song": {
+  1033→                "volume_level": music_volume,
+  1034→                "is_saved": "0",
+  1035→                "artist_name": artist_name,
+  1036→                "audio_asset_id": audio_asset_id,
+  1037→                "audio_cluster_id": audio_cluster_id,
+  1038→                "track_name": track_name,
+  1039→                "is_picked_precapture": "1",
+  1040→            },
+  1041→        }
+  1042→        data["music_params"] = {
+  1043→            "audio_asset_id": audio_asset_id,
+  1044→            "audio_cluster_id": audio_cluster_id,
+  1045→            "audio_asset_start_time_in_ms": int(audio_asset_start_time),
+  1046→            "derived_content_start_time_in_ms": 0,
+  1047→            "overlap_duration_in_ms": int(overlap_duration),
+  1048→            "product": product,
+  1049→            "song_name": track_name,
+  1050→            "artist_name": artist_name,
+  1051→            "alacorn_session_id": alacorn_session_id,
+  1052→        }
+  1053→        music_canonical_id = self._track_value(track, "music_canonical_id")
+  1054→        if music_canonical_id:
+  1055→            data["clips_audio_metadata"]["song"]["music_canonical_id"] = music_canonical_id
+  1056→            data["music_params"]["music_canonical_id"] = music_canonical_id
+  1057→        return data
+  1058→
+  1059→    def clip_upload_with_music(
+  1060→        self,
+  1061→        path: Path,
+  1062→        caption: str,
+  1063→        track: Union[Track, Dict],
+  1064→        thumbnail: Path = None,
+  1065→        usertags: List[Usertag] = [],
+  1066→        location: Location = None,
+  1067→        extra_data: Dict[str, object] = {},
+  1068→        audio_asset_start_time: Optional[int] = None,
+  1069→        overlap_duration: int = 30000,
+  1070→        original_volume: float = 1.0,
+  1071→        music_volume: float = 1.0,
+  1072→        product: str = "story_camera_clips_v2",
+  1073→        alacorn_session_id: str = "null",
+  1074→        **kwargs,
+  1075→    ) -> Media:
+  1076→        """
+  1077→        Upload a Reel with music metadata without local audio muxing.
+  1078→
+  1079→        Pass ``thumbnail=...`` to avoid automatic thumbnail generation in
+  1080→        environments where ffmpeg is not available.
+  1081→        """
+  1082→        data = self.clip_music_extra_data(
+  1083→            track,
+  1084→            extra_data=extra_data,
+  1085→            audio_asset_start_time=audio_asset_start_time,
+  1086→            overlap_duration=overlap_duration,
+  1087→            original_volume=original_volume,
+  1088→            music_volume=music_volume,
+  1089→            product=product,
+  1090→            alacorn_session_id=alacorn_session_id,
+  1091→        )
+  1092→        return self.clip_upload(
+  1093→            path,
+  1094→            caption,
+  1095→            thumbnail=thumbnail,
+  1096→            usertags=usertags,
+  1097→            location=location,
+  1098→            extra_data=data,
+  1099→            **kwargs,
+  1100→        )
+  1101→
+  1102→    def clip_configure(
+  1103→        self,
+  1104→        upload_id: str,
+  1105→        thumbnail: Path,
+  1106→        width: int,
+  1107→        height: int,
+  1108→        duration: int,
+  1109→        caption: str,
+  1110→        usertags: List[Usertag] = [],
+  1111→        location: Location = None,
+  1112→        feed_show: str = "1",
+  1113→        extra_data: Dict[str, object] = {},
+  1114→    ) -> Dict:
+  1115→        """
+  1116→        Post Configure CLIP (send caption, thumbnail and more to Instagram)
+  1117→
+  1118→        Parameters
+  1119→        ----------
+  1120→        upload_id: str
+  1121→            Unique identifier for a IGTV video
+  1122→        thumbnail: Path
+  1123→            Path to thumbnail for IGTV
+  1124→        width: int
+  1125→            Width of the video in pixels
+  1126→        height: int
+  1127→            Height of the video in pixels
+  1128→        duration: int
+  1129→            Duration of the video in seconds
+  1130→        caption: str
+  1131→            Media caption
+  1132→        usertags: List[Usertag], optional
+  1133→            List of users to be tagged on this upload, default is empty list.
+  1134→        location: Location, optional
+  1135→            Location tag for this upload, default is None
+  1136→        extra_data: Dict[str, object], optional
+  1137→            Dict of extra data, if you need to add your params, like {"disable_comments": 1}.
+  1138→
+  1139→        Returns
+  1140→        -------
+  1141→        Dict
+  1142→            A dictionary of response from the call
+  1143→        """
+  1144→        self.photo_rupload(Path(thumbnail), upload_id, for_story=True)
+  1145→        usertags = [{"user_id": tag.user.pk, "position": [tag.x, tag.y]} for tag in usertags]
+  1146→        data = {
+  1147→            # "igtv_ads_toggled_on": "0",
+  1148→            "filter_type": "0",
+  1149→            "timezone_offset": str(self.timezone_offset),
+  1150→            "media_folder": "ScreenRecorder",
+  1151→            "location": self.location_build(location),
+  1152→            "source_type": "4",
+  1153→            # "title": title,
+  1154→            "caption": caption,
+  1155→            "usertags": json.dumps({"in": usertags}),
+  1156→            "date_time_original": date_time_original(time.localtime()),
+  1157→            "clips_share_preview_to_feed": feed_show,
+  1158→            "upload_id": upload_id,
+  1159→            # "igtv_composer_session_id": self.igtv_composer_session_id,
+  1160→            "device": self.device,
+  1161→            "length": duration,
+  1162→            "clips": [{"length": duration, "source_type": "4"}],
+  1163→            "extra": {"source_width": width, "source_height": height},
+  1164→            "audio_muted": False,
+  1165→            "poster_frame_index": 70,
+  1166→            **extra_data,
+  1167→        }
+  1168→        return self.private_request(
+  1169→            "media/configure_to_clips/?video=1",
+  1170→            self.with_default_data(data),
+  1171→            with_signature=True,
+  1172→        )
+  1173→
+  1174→
+  1175→def analyze_video(path: Path, thumbnail: Path = None) -> tuple:
+  1176→    """
+  1177→    Analyze and crop thumbnail if need
+  1178→
+  1179→    Parameters
+  1180→    ----------
+  1181→    path: Path
+  1182→        Path to the video
+  1183→    thumbnail: Path
+  1184→        Path to thumbnail for CLIP
+  1185→
+  1186→    Returns
+  1187→    -------
+  1188→    Tuple
+  1189→        A tuple with (thumbail path, width, height, duration)
+  1190→    """
+  1191→    return analyze_video_for_upload(path, thumbnail, label="CLIP", crop_thumbnail=crop_thumbnail)
+  1192→
+  1193→
+  1194→def crop_thumbnail(path: Path) -> bool:
+  1195→    """
+  1196→    Analyze and crop thumbnail if need
+  1197→
+  1198→    Parameters
+  1199→    ----------
+  1200→    path: Path
+  1201→        Path to the video
+  1202→
+  1203→    Returns
+  1204→    -------
+  1205→    bool
+  1206→        A boolean value
+  1207→    """
+  1208→    with Image.open(str(path)) as im:
+  1209→        width, height = im.size
+  1210→        offset = (height / 1.78) / 2
+  1211→        center = width / 2
+  1212→        # Crop the center of the image
+  1213→        cropped = im.crop((center - offset, 0, center + offset, height))
+  1214→        try:
+  1215→            with open(path, "wb") as fp:
+  1216→                cropped.save(fp)
+  1217→        finally:
+  1218→            cropped.close()
+  1219→    return True
+  1220→

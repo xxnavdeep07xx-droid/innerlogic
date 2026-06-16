@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://subzeroid.github.io/instagrapi/usage-guide/media.html",
+    "name": "Media | instagrapi - GitHub Pages",
+    "snippet": "Upload a Reel with music metadata without local audio muxing. clip_upload_as_reel_with_music(path: Path, caption: str, track: Track, extra_data: Dict = {}) ...",
+    "host_name": "subzeroid.github.io",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/subzeroid/instagrapi/issues/2144",
+    "name": "Upload carousel with music #2144 - subzeroid/instagrapi - GitHub",
+    "snippet": "Current master already has a music-aware upload path for reels via clip_upload_as_reel_with_music(...) the feature is currently unsupported in ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=39jtb0uCvRA",
+    "name": "How to Add Music to Instagram Posts and Reels - YouTube",
+    "snippet": "Instagram post. We'll cover how to easily add sound to an Instagram post and reel directly from the Instagram app. If you'd prefer no ...",
+    "host_name": "www.youtube.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://postproxy.dev/blog/instagram-reels-api-publishing-guide",
+    "name": "Instagram Reels API Publishing Guide (2026) - Postproxy",
+    "snippet": "You cannot add Instagram's music library tracks through the API. If your Reel needs music, it must be embedded in the video file before upload.",
+    "host_name": "postproxy.dev",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://jenessastark.medium.com/3-ways-to-add-music-when-auto-publishing-instagram-reels-c7fb5a1ac8fd",
+    "name": "3 Ways to Add Music When Auto-Publishing Instagram Reels",
+    "snippet": "Once you have your track, upload it into your video editing tool. The first thing you're going to do is create your entire Reel in Instagram. ...",
+    "host_name": "jenessastark.medium.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/audio-api",
+    "name": "Audio API - Instagram Platform - Facebook Developers",
+    "snippet": "The Instagram Audio API allows you to retrieve and search for audio — both original sounds from Instagram Reels and music — and attach them to Reels at creation ...",
+    "host_name": "developers.facebook.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eHtEwo1s9JU",
+    "name": "How to Add Your Own Music to Instagram Reels (The Easy Way)",
+    "snippet": "... sound to instagram using the built-in import tool. You'll learn how to add music to ig reel uploads using video files already on your phone ...",
+    "host_name": "www.youtube.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tiktok.com/@simplealpaca/video/7191475031183035690?lang=en",
+    "name": "How to Add Music to Instagram Post: Step-By-Step Guide - TikTok",
+    "snippet": "4065 Likes, 64 Comments. TikTok video from Simple Alpaca (@simplealpaca): “Learn how to add music to an Instagram post in a few simple steps ...",
+    "host_name": "www.tiktok.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://community.sprinklr.com/conversations/sprinklr-social/can-i-add-instagram-musicaudio-to-a-post/662fb3b8abd45c4364316aba",
+    "name": "Can I add Instagram music/audio to a post? - Sprinklr Community",
+    "snippet": "I am wondering if it is possible to add music or audio to an Instagram post. When I upload/schedule, I use the Quick Publish widget and I don't ...",
+    "host_name": "community.sprinklr.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://help.instagram.com/664508917489819",
+    "name": "Add music, effects and more to your reel on Instagram",
+    "snippet": "When you record a reel, you'll see a tool menu on the left. You can tap: Music to search for a song in our music library. You can choose which part of the song ...",
+    "host_name": "help.instagram.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

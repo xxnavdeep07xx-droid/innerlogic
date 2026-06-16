@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://huggingface.co/blog/Dzkaka/diffrhythm-open-source-ai-music-generator",
+    "name": "DiffRhythm: Revolutionizing Open Source AI Music Generator",
+    "snippet": "DiffRhythm generates full-length songs with perfectly synchronized vocals and instrumentals in a single, streamlined process.",
+    "host_name": "huggingface.co",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/multimodal-art-projection/YuE",
+    "name": "multimodal-art-projection/YuE: YuE: Open Full-song Music  - GitHub",
+    "snippet": "YuE is a groundbreaking series of open-source foundation models designed for music generation, specifically for transforming lyrics into full songs.",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=HCx3InUzQIQ",
+    "name": "Create your First FREE AI MUSIC (Locally) - Make in Seconds",
+    "snippet": "our first music with AI. This is kind of a fun thing and we explore another type of model. We use HuggingFace again, which is where many ...",
+    "host_name": "www.youtube.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://huggingface.co/blog/theeseus-ai/musicgen-api",
+    "name": "Building a MusicGen API to Generate Custom Music Tracks Locally",
+    "snippet": "In this article, I'll guide you through building a MusicGen API using facebook/musicgen-large, combining technical instruction with insights into why ...",
+    "host_name": "huggingface.co",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://huggingface.co/facebook/musicgen-large",
+    "name": "facebook/musicgen-large - Hugging Face",
+    "snippet": "MusicGen is a text-to-music model capable of genreating high-quality music samples conditioned on text descriptions or audio prompts.",
+    "host_name": "huggingface.co",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=map22OdIUp8",
+    "name": "How to Install Meta's FREE Text-to-Music AI Generator  - YouTube",
+    "snippet": "In this video, I show you how to install and use Meta's new open-sourced music generator, MusicGen. I'll show you how to use it with Google ...",
+    "host_name": "www.youtube.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/StableDiffusion/comments/1jlfmsj/when_will_there_be_an_ai_music_generator_that_you",
+    "name": "When will there be an Ai music generator that you can run locally, or",
+    "snippet": "I Found a Secret AI MUSIC Generator - 100% FREE and Unlimited (With Commercial usage rights)\nYuE is pretty good. 7B model is the first stage, and the 1B model is the second stage model (you need both). You can run Q5_K_M model for the 7B model.",
+    "host_name": "www.reddit.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.openvino.ai/2023.3/notebooks/241-riffusion-text-to-music-with-output.html",
+    "name": "Text-to-Music generation using Riffusion and OpenVINO",
+    "snippet": "In this tutorial, we consider how to run a text-to-music generation pipeline using Riffusion and OpenVINO. We will use a pre-trained model from the Diffusers ...",
+    "host_name": "docs.openvino.ai",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1kg9jkq/new_sota_music_generation_model",
+    "name": "New SOTA music generation model : r/LocalLLaMA - Reddit",
+    "snippet": "\"In short, we aim to build the Stable Diffusion moment for music.\" Apache license is a big deal for the community, and the LORA support makes it ...",
+    "host_name": "www.reddit.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=GQfKoIMpea8",
+    "name": "5 Open Source Generative Music Models You Can't Miss - YouTube",
+    "snippet": "I introduce 5 open source generative music AI models. They are both in the symbolic and audio space. You can use them to streamline the ...",
+    "host_name": "www.youtube.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

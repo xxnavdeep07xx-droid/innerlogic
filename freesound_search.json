@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/MTG/freesound-python/blob/master/freesound.py",
+    "name": "freesound-python/freesound.py at master · MTG/freesound-python",
+    "snippet": "Download the original sound file (requires Oauth2 authentication). https://freesound.org/docs/api/resources_apiv2.html#download-sound-oauth2-required.",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://freesound.org/docs/api/overview.html",
+    "name": "APIv2 Overview — Freesound API documentation",
+    "snippet": "With the Freesound APIv2 you can browse, search, and retrieve information about Freesound users, packs, and the sounds themselves of course.",
+    "host_name": "freesound.org",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://freesound.org/docs/api/resources_apiv2.html",
+    "name": "Resources — Freesound API documentation",
+    "snippet": "This resource allows searching for sounds in Freesound by matching user metadata (e.g. tags, username), precomputed content-based descriptors, and other kinds ...",
+    "host_name": "freesound.org",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://groups.google.com/g/freesound-api/c/Wv8pQxjdXxA",
+    "name": "Auth For Demo App - Google Groups",
+    "snippet": "Here is a Python Flask example of doing the full OAuth2 flow to authenticate users with Freesound API.",
+    "host_name": "groups.google.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://pypi.org/project/freesound-api",
+    "name": "freesound-api - PyPI",
+    "snippet": "Downloading full quality sounds requires Oauth2 authentication (see https://freesound.org/docs/api/authentication.html). Oauth2 authentication ...",
+    "host_name": "pypi.org",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/28252727/freesound-oauth2-authentication-fails",
+    "name": "Freesound OAuth2 authentication fails - Stack Overflow",
+    "snippet": "It's a 'server trust' challenge. Could this be something to do with it? Would you even expect an authentication challenge of this nature?",
+    "host_name": "stackoverflow.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://nunotrocado.com/freesound",
+    "name": "Freesound - Nuno Trocado",
+    "snippet": "The Freesound API offers two authentication strategies: token-based and OAuth2. ... API documentation: https://freesound.org/docs/api/resources_apiv2.html#id55 ...",
+    "host_name": "nunotrocado.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://mtg.github.io/freesound-juce",
+    "name": "freesound-juce - MTG projects",
+    "snippet": "With the Freesound API you can browse, search, and retrieve information about Freesound users, packs, and the sounds themselves of course.",
+    "host_name": "mtg.github.io",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://freesound.org/forum/bug-reports-errors-and-feature-requests/42694",
+    "name": "Having trouble figuring out OAuth authentication for downloading",
+    "snippet": "Hello,. I received my API key and I wish to download sounds via curl like in the API docs. Let's pretend my API key is abCDEFghijkLMNOP123456789 and the ...",
+    "host_name": "freesound.org",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://opensource.creativecommons.org/blog/entries/freesound-intro",
+    "name": "An Introduction to Freesound - Creative Commons Open Source",
+    "snippet": "The current version of the API, Freesound APIv2, can be used by 3rd party developers and researchers to programatically search sounds in ...",
+    "host_name": "opensource.creativecommons.org",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

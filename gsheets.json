@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://www.youtube.com/watch?v=zCEJurLGFRk",
+    "name": "Automate Google Sheets With Python - Google Sheets API Tutorial",
+    "snippet": "... Python scripts with Google Sheets for efficient data management and task automation. Free Courses Introduction To Software ...\nSecure your business effortlessly with a 3-month NordPass trial! Use ”'techwithtim”' activation code at https://nordpass.com/techwithtim.",
+    "host_name": "www.youtube.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://discuss.google.dev/t/google-sheets-credentials-in-github-actions-environment/132414",
+    "name": "Google Sheets credentials in GitHub Actions Environment",
+    "snippet": "GitHub Actions is used to remotely activate the application at scheduled intervals in a virtual environment within GitHub, which accesses Google ...\nI found a really simple way to do it, you can find it in this GitHub repository. The docs in README teach many ways to make it using the.",
+    "host_name": "discuss.google.dev",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developers.google.com/workspace/sheets/api/quickstart/python",
+    "name": "Python quickstart | Google Sheets",
+    "snippet": "Create a Python command-line application that makes requests to the Google Sheets API. Quickstarts explain how to set up and run an app that calls a Google ...",
+    "host_name": "developers.google.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@gallaghersam95/cloud-run-for-google-sheets-part-1-b3a6a252219a",
+    "name": "Cloud Run for Google Sheets — Part 1 | by Sam Gallagher - Medium",
+    "snippet": "This post will walk through the following: Setting up a Cloud Run service in GCP a Python API application pipeline using GitHub actions (to ...",
+    "host_name": "medium.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/60704698/how-to-create-google-sheets-using-service-account-credential-in-python",
+    "name": "How to create Google Sheets using Service Account Credential in",
+    "snippet": "All I want is to create a spreadsheet with python in my gdrive folder from any computer without a need to click somewhere to grant access.",
+    "host_name": "stackoverflow.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://community.openai.com/t/custom-action-for-google-sheets/520798",
+    "name": "Custom action for Google Sheets - OpenAI Developer Community",
+    "snippet": "Here's an overview of the steps to call Google Sheets from your GPT model as a custom action and store data in it.\nHi, I'm looking for any guide describing how to call Google Sheets from my GPT as an action and store there data.",
+    "host_name": "community.openai.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/marketplace/actions/gsheet-action",
+    "name": "gsheet.action - GitHub Marketplace",
+    "snippet": "gsheet.action is a GitHub action designed to facilitate Create, Read, Update, and Delete (CRUD) operations on Google Sheets directly from your GitHub workflows.",
+    "host_name": "github.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://community.home-assistant.io/t/writting-sensors-values-to-google-sheets/15864",
+    "name": "Writting sensors' values to Google Sheets - Configuration",
+    "snippet": "I wanted to send the values of some sensors (every 15 minutes) to a Google sheet in order to visualize data for long periods of time (months, years?).",
+    "host_name": "community.home-assistant.io",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.facebook.com/groups/python/posts/1479599902880569",
+    "name": "Basic code to send input to Google Sheets API - Facebook",
+    "snippet": "Can anyone help me with some basic code to send an input through google sheets to an API, collect the output and put it back into the sheet.",
+    "host_name": "www.facebook.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=sVURhxyc6jE",
+    "name": "Update Google Sheets Using A Service Account With  - YouTube",
+    "snippet": "As someone who works with Google Sheets API, I frequently get questions asking how to connect to a Google Sheets file using Google Sheets ...",
+    "host_name": "www.youtube.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]
