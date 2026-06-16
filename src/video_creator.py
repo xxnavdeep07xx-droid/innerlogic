@@ -307,7 +307,7 @@ WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H20000000,&H80000000,-1,0,0,0,100,100,1,0,1,2,4,8,{margin_lr},{margin_lr},{block_start_y},1
-Style: Author,{author_fontname},22,&H80FFFFFF,&H000000FF,&H20000000,&H80000000,0,-1,0,0,100,100,1,0,1,1,3,8,{margin_lr},{margin_lr},{block_start_y + num_lines * line_height + 30},1
+Style: Author,{author_fontname},20,&H80AAAAAA,&H000000FF,&H20000000,&H80000000,0,-1,0,0,100,100,1,0,1,1,2,8,{margin_lr},{margin_lr},{block_start_y + num_lines * line_height + 20},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -586,16 +586,17 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_clip = quote_clip.with_effects([FadeIn(0.8), FadeOut(1.5)])
         clips.append(quote_clip)
         
-        # Author text — positioned below quote
-        author_y = min(quote_y + 0.05 * est_lines + 0.08, 0.68)
+        # Author text — positioned below quote, safely within 65% vertical limit
+        # Instagram UI overlay starts ~72% from top, so keep author well above that
+        author_y = min(quote_y + 0.04 * est_lines + 0.06, 0.62)
         
         author_clip = TextClip(
             text=f"— {author}",
-            font_size=22,
-            color="#BBBBBB",
+            font_size=20,
+            color="#AAAAAA",
             font=author_font,
             text_align="center",
-            size=(text_width, None),
+            size=(text_width, 50),
             method="caption",
         )
         author_clip = author_clip.with_duration(duration - 3.0)
