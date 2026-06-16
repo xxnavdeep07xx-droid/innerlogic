@@ -439,40 +439,50 @@ def run_rest_day_pipeline(today_info):
 
 def _generate_minimal_audio(temp_dir):
     """
-    Generate a minimal quiet audio file for Insta Day reels.
-    Instagram needs a valid audio stream in the video even if we're
-    attaching native music server-side.
+    Generate a truly silent audio file for Insta Day reels.
+    
+    Instagram needs a valid audio stream in the video, but we want
+    it to be completely silent so that the Instagram native music
+    can play at full volume without any interference.
+    
+    Uses digital silence (anullsrc) instead of brown noise, which
+    was interfering with Instagram's server-side music mixing.
     """
     import subprocess
     
     output_path = os.path.join(temp_dir, "silent_audio.mp3")
     
+    # Method 1: True digital silence (best for IG native music)
     try:
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "anoisesrc=d=16:c=brown:r=44100:a=0.01",
-            "-c:a", "libmp3lame", "-b:a", "64k",
-            "-af", "volume=0.02,afade=t=in:st=0:d=1,afade=t=out:st=14:d=1",
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            "-t", "16",
+            "-c:a", "libmp3lame", "-b:a", "128k",
             output_path
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=15)
         if result.returncode == 0 and os.path.exists(output_path):
-            return output_path
-    except Exception:
-        pass
+            file_size = os.path.getsize(output_path)
+            if file_size > 0:
+                print(f"   🔇 True silent audio created ({file_size / 1024:.0f} KB)")
+                return output_path
+    except Exception as e:
+        print(f"   ⚠️ Silent audio method 1 failed: {e}")
     
-    # Absolute fallback — even shorter silent audio
+    # Method 2: Very short silent audio as absolute fallback
     try:
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=100:duration=16",
-            "-c:a", "libmp3lame", "-b:a", "64k",
-            "-af", "volume=0.01",
-            output_path
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+            "-t", "16",
+            "-c:a", "aac", "-b:a", "64k",
+            output_path.replace(".mp3", ".m4a")
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=15)
-        if result.returncode == 0 and os.path.exists(output_path):
-            return output_path
+        if result.returncode == 0 and os.path.exists(output_path.replace(".mp3", ".m4a")):
+            print(f"   🔇 Silent audio (AAC) created")
+            return output_path.replace(".mp3", ".m4a")
     except Exception:
         pass
     

@@ -9,7 +9,7 @@ Features:
 - Gradient dark overlay for text readability
 - Text overlay with fade-in/fade-out (MoviePy or ASS subtitles)
 - Audio crossfade (fade in/out)
-- Color grading (muted, cinematic look)
+- Color grading with cinematic themes (Homage, Golden Brown, Maritza, Blue, etc.)
 - FFmpeg fallback if MoviePy fails
 
 Output: 1080x1920 (9:16) MP4, H.264, AAC audio.
@@ -48,15 +48,180 @@ ZOOM_END = 1.15
 VIGNETTE_STRENGTH = 0.55
 
 # Text readability gradient (dark overlay at center for quote legibility)
-TEXT_DARKEN_OPACITY = 0.45
+TEXT_DARKEN_OPACITY = 0.50
+
+
+# ─── Color Grading Themes ─────────────────────────────────────────────────────
+
+# Each theme defines a 3x3 color matrix (RGB channel mixing) + tone adjustments
+# Matrix format: [[r_r, r_g, r_b], [g_r, g_g, g_b], [b_r, b_g, b_b]]
+# Each output channel = sum of (input_channel * coefficient)
+
+COLOR_THEMES = {
+    "homage": {
+        "name": "Homage",
+        "description": "Warm vintage — amber glow, lifted blacks, nostalgic film",
+        "matrix": [
+            [1.05, 0.05, 0.02],   # R: warm boost
+            [0.02, 0.95, 0.03],   # G: slight warmth
+            [0.00, 0.02, 0.85],   # B: reduced for warmth
+        ],
+        "brightness": 0.03,
+        "contrast": 1.05,
+        "saturation": 0.80,
+        "gamma": 0.92,
+        "ffmpeg_mixer": "0.95:0.05:0.02:0.02:0.02:0.93:0.03:0.02:0.0:0.02:0.82:0.03",
+        "ffmpeg_eq": "brightness=0.03:contrast=1.05:saturation=0.80:gamma=0.92",
+    },
+    "golden_brown": {
+        "name": "Golden Brown",
+        "description": "Amber/brown — warm brown shadows, golden highlights, autumn feel",
+        "matrix": [
+            [1.08, 0.06, 0.01],   # R: strong warm
+            [0.03, 0.90, 0.02],   # G: slight warmth
+            [0.00, 0.03, 0.75],   # B: significantly reduced
+        ],
+        "brightness": 0.02,
+        "contrast": 1.08,
+        "saturation": 0.75,
+        "gamma": 0.90,
+        "ffmpeg_mixer": "1.0:0.06:0.01:0.02:0.03:0.88:0.02:0.01:0.0:0.03:0.72:0.02",
+        "ffmpeg_eq": "brightness=0.02:contrast=1.08:saturation=0.75:gamma=0.90",
+    },
+    "maritza": {
+        "name": "Maritza",
+        "description": "Teal/green — cool teal shadows, green mid-tones, oceanic depth",
+        "matrix": [
+            [0.85, 0.03, 0.02],   # R: reduced for cool tone
+            [0.02, 1.0, 0.05],    # G: boosted green
+            [0.05, 0.08, 1.0],    # B: strong teal boost
+        ],
+        "brightness": 0.01,
+        "contrast": 1.06,
+        "saturation": 0.85,
+        "gamma": 0.95,
+        "ffmpeg_mixer": "0.82:0.03:0.02:0.01:0.02:0.98:0.05:0.01:0.05:0.08:0.98:0.02",
+        "ffmpeg_eq": "brightness=0.01:contrast=1.06:saturation=0.85:gamma=0.95",
+    },
+    "blue": {
+        "name": "Blue",
+        "description": "Cool blue — steel blue tint, cold highlights, melancholic depth",
+        "matrix": [
+            [0.82, 0.02, 0.05],   # R: reduced
+            [0.02, 0.90, 0.06],   # G: slight cool
+            [0.06, 0.05, 1.10],   # B: strong boost
+        ],
+        "brightness": 0.01,
+        "contrast": 1.08,
+        "saturation": 0.82,
+        "gamma": 0.93,
+        "ffmpeg_mixer": "0.80:0.02:0.05:0.01:0.02:0.88:0.06:0.01:0.06:0.05:1.08:0.02",
+        "ffmpeg_eq": "brightness=0.01:contrast=1.08:saturation=0.82:gamma=0.93",
+    },
+    "noir": {
+        "name": "Noir",
+        "description": "Classic black & white — high contrast, dramatic, timeless",
+        "matrix": [
+            [0.30, 0.59, 0.11],   # R: luminance weights
+            [0.30, 0.59, 0.11],   # G: same
+            [0.30, 0.59, 0.11],   # B: same
+        ],
+        "brightness": 0.02,
+        "contrast": 1.15,
+        "saturation": 0.0,
+        "gamma": 0.88,
+        "ffmpeg_mixer": "0.30:0.59:0.11:0.02:0.30:0.59:0.11:0.01:0.30:0.59:0.11:0.01",
+        "ffmpeg_eq": "brightness=0.02:contrast=1.15:saturation=0.0:gamma=0.88",
+    },
+    "vintage_fade": {
+        "name": "Vintage Fade",
+        "description": "Faded vintage — lifted blacks, desaturated, faded photograph look",
+        "matrix": [
+            [0.95, 0.04, 0.03],   # R: slight warm fade
+            [0.03, 0.92, 0.04],   # G: slight fade
+            [0.02, 0.04, 0.88],   # B: faded
+        ],
+        "brightness": 0.06,
+        "contrast": 0.90,
+        "saturation": 0.70,
+        "gamma": 1.05,
+        "ffmpeg_mixer": "0.92:0.04:0.03:0.04:0.03:0.90:0.04:0.02:0.02:0.04:0.85:0.03",
+        "ffmpeg_eq": "brightness=0.06:contrast=0.90:saturation=0.70:gamma=1.05",
+    },
+    "crimson": {
+        "name": "Crimson",
+        "description": "Deep crimson — dark red shadows, warm intensity, passionate",
+        "matrix": [
+            [1.10, 0.04, 0.01],   # R: strong red boost
+            [0.02, 0.85, 0.03],   # G: reduced
+            [0.03, 0.03, 0.78],   # B: significantly reduced
+        ],
+        "brightness": 0.01,
+        "contrast": 1.10,
+        "saturation": 0.85,
+        "gamma": 0.90,
+        "ffmpeg_mixer": "1.06:0.04:0.01:0.01:0.02:0.83:0.03:0.01:0.03:0.03:0.75:0.02",
+        "ffmpeg_eq": "brightness=0.01:contrast=1.10:saturation=0.85:gamma=0.90",
+    },
+    "midnight": {
+        "name": "Midnight",
+        "description": "Midnight blue — deep dark blue, mysterious, night-time atmosphere",
+        "matrix": [
+            [0.78, 0.02, 0.08],   # R: reduced
+            [0.02, 0.85, 0.08],   # G: slight cool
+            [0.05, 0.05, 1.15],   # B: strong blue boost
+        ],
+        "brightness": -0.02,
+        "contrast": 1.12,
+        "saturation": 0.78,
+        "gamma": 0.88,
+        "ffmpeg_mixer": "0.75:0.02:0.08:0.01:0.02:0.82:0.08:0.01:0.05:0.05:1.12:0.02",
+        "ffmpeg_eq": "brightness=-0.02:contrast=1.12:saturation=0.78:gamma=0.88",
+    },
+}
+
+
+def get_random_theme():
+    """Pick a random color grading theme."""
+    return random.choice(list(COLOR_THEMES.keys()))
+
+
+def apply_color_matrix_np(frame, theme_key):
+    """
+    Apply color grading matrix to a numpy frame using the specified theme.
+    Works with MoviePy frames (HxWx3 uint8 arrays).
+    """
+    import numpy as np
+    
+    theme = COLOR_THEMES.get(theme_key)
+    if not theme:
+        return frame
+    
+    matrix = np.array(theme["matrix"], dtype=np.float32)
+    img = frame.astype(np.float32) / 255.0
+    h, w = img.shape[:2]
+    flat = img.reshape(-1, 3)
+    graded = flat @ matrix.T
+    
+    brightness = theme.get("brightness", 0.0)
+    contrast = theme.get("contrast", 1.0)
+    gamma = theme.get("gamma", 1.0)
+    
+    graded = (graded + brightness) * contrast
+    graded = np.power(np.clip(graded, 0, None), 1.0 / gamma)
+    graded = np.clip(graded * 255.0, 0, 255).astype(np.uint8)
+    
+    return graded.reshape(h, w, 3)
 
 
 # ─── Text Wrapping ────────────────────────────────────────────────────────────
 
-def wrap_quote_text(text, max_chars_per_line=32):
+def wrap_quote_text(text, max_chars_per_line=25):
     """
     Wrap quote text for screen display.
     Returns a list of lines, each within the max character limit.
+    Uses 25 chars per line to ensure text fits within the container
+    without being cut off on any device.
     """
     words = text.split()
     lines = []
@@ -74,20 +239,26 @@ def wrap_quote_text(text, max_chars_per_line=32):
     if current_line:
         lines.append(current_line)
     
+    # Safety: limit to 8 lines max to avoid vertical overflow
+    if len(lines) > 8:
+        while len(lines) > 7:
+            last = lines.pop()
+            lines[-1] = lines[-1] + " " + last
+    
     return lines
 
 
 # ─── ASS Subtitle (FFmpeg fallback) ──────────────────────────────────────────
 
-def create_subtitle_file(quote, temp_dir, font_paths):
+def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     """
     Create an ASS subtitle file for FFmpeg fallback mode.
-    Enhanced with better fade timing and shadow effects.
+    Enhanced with better fade timing, shadow effects, and proper centering.
     """
     quote_text = quote["text"]
     author = quote["author"]
     
-    lines = wrap_quote_text(quote_text, max_chars_per_line=32)
+    lines = wrap_quote_text(quote_text, max_chars_per_line=25)
     wrapped_text = "\\N".join(lines)
     
     quote_fontname = font_paths.get("quote", "Cormorant Garamond")
@@ -97,28 +268,28 @@ def create_subtitle_file(quote, temp_dir, font_paths):
     total_text_lines = num_lines + 1
     line_height = 56
     total_height = total_text_lines * line_height
-    start_y = int((1920 - total_height) / 2)
+    # Center vertically, slightly above middle (around 40% from top)
+    start_y = int((1920 - total_height) / 2) - 60
     
-    # Fade timing: quote appears at 0.8s, author at 1.8s, both fade out at 13s
+    # Fade timing
     quote_start = "0:00:00.80"
     quote_end = "0:00:13.50"
     author_start = "0:00:01.80"
     author_end = "0:00:13.50"
     
-    # Fade: \fade(a1,a2,a3,t1,t2,t3,t4) — opacity ramp
     quote_fade = r"{\fade(255,255,0,0,80,1250,1350)}"
     author_fade = r"{\fade(255,255,0,0,180,1250,1350)}"
     
     # Dynamic font size based on quote length
     num_chars = len(quote_text)
     if num_chars <= 50:
-        q_font_size = 46
+        q_font_size = 44
     elif num_chars <= 80:
-        q_font_size = 42
+        q_font_size = 40
     elif num_chars <= 120:
-        q_font_size = 38
+        q_font_size = 36
     else:
-        q_font_size = 34
+        q_font_size = 32
     
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
@@ -129,8 +300,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,3,0,1,4,4,8,80,80,{start_y},1
-Style: Author,{author_fontname},28,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,3,8,80,80,{start_y + num_lines * line_height + 30},1
+Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,2,0,1,3,3,8,80,80,{start_y},1
+Style: Author,{author_fontname},26,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,2,8,80,80,{start_y + num_lines * 56 + 25},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -155,7 +326,7 @@ def _create_vignette_clip(width, height, duration):
     cx, cy = width / 2, height / 2
     dist = np.sqrt((x - cx)**2 + (y - cy)**2) / np.sqrt(cx**2 + cy**2)
     alpha = np.clip(1.0 - dist * VIGNETTE_STRENGTH, 0, 1)
-    alpha = (alpha * 180).astype(np.uint8)  # Max opacity ~70%
+    alpha = (alpha * 180).astype(np.uint8)
     
     img = np.zeros((height, width, 4), dtype=np.uint8)
     img[:, :, 3] = alpha
@@ -173,20 +344,15 @@ def _create_text_backdrop(width, height, duration):
     
     img = np.zeros((height, width, 4), dtype=np.uint8)
     
-    # Dark gradient centered at ~40-65% of the screen height (quote area)
-    center_y_start = int(height * 0.30)
-    center_y_end = int(height * 0.72)
+    center_y_start = int(height * 0.25)
+    center_y_end = int(height * 0.75)
     center_y_mid = (center_y_start + center_y_end) // 2
     
     for y in range(center_y_start, center_y_end):
-        # Distance from center of the text area (0 at center, 1 at edges)
         dist_from_center = abs(y - center_y_mid) / (center_y_end - center_y_start) * 2
         dist_from_center = min(dist_from_center, 1.0)
-        
-        # Opacity: strongest at center, fading to transparent at edges
         opacity = int(TEXT_DARKEN_OPACITY * 255 * (1.0 - dist_from_center ** 1.5))
-        
-        img[y, :, 3] = opacity  # Alpha channel
+        img[y, :, 3] = opacity
     
     backdrop = ImageClip(img, duration=duration)
     return backdrop
@@ -195,7 +361,6 @@ def _create_text_backdrop(width, height, duration):
 def _create_dust_particles(width, height, duration, num_particles=30):
     """
     Create floating dust/particle overlay for cinematic atmosphere.
-    Subtle, slowly drifting particles that add depth and mood.
     """
     import numpy as np
     from PIL import Image
@@ -203,7 +368,6 @@ def _create_dust_particles(width, height, duration, num_particles=30):
     fps = DEFAULT_FPS
     total_frames = int(duration * fps)
     
-    # Pre-generate particle positions and properties
     particles = []
     for _ in range(num_particles):
         particles.append({
@@ -211,9 +375,9 @@ def _create_dust_particles(width, height, duration, num_particles=30):
             "y": random.uniform(0, height),
             "size": random.uniform(1.5, 4.0),
             "speed_x": random.uniform(-0.3, 0.3),
-            "speed_y": random.uniform(-0.8, -0.15),  # Drift upward slowly
+            "speed_y": random.uniform(-0.8, -0.15),
             "brightness": random.uniform(0.3, 0.8),
-            "phase": random.uniform(0, math.pi * 2),  # For pulsing
+            "phase": random.uniform(0, math.pi * 2),
             "pulse_speed": random.uniform(0.5, 2.0),
         })
     
@@ -221,24 +385,18 @@ def _create_dust_particles(width, height, duration, num_particles=30):
         frame = np.zeros((height, width, 4), dtype=np.uint8)
         
         for p in particles:
-            # Calculate position with drift
             x = p["x"] + p["speed_x"] * t * 30
             y = p["y"] + p["speed_y"] * t * 30
-            
-            # Wrap around
             x = x % width
             y = y % height
             
-            # Pulse brightness
             pulse = 0.5 + 0.5 * math.sin(p["phase"] + t * p["pulse_speed"])
             brightness = p["brightness"] * pulse
             
-            # Draw the particle (small circle)
             ix, iy = int(x), int(y)
             size = int(p["size"])
-            alpha = int(brightness * 60)  # Keep it subtle
+            alpha = int(brightness * 60)
             
-            # Simple pixel placement with anti-aliasing approximation
             for dy in range(-size, size + 1):
                 for dx in range(-size, size + 1):
                     dist = math.sqrt(dx*dx + dy*dy)
@@ -247,7 +405,6 @@ def _create_dust_particles(width, height, duration, num_particles=30):
                         if 0 <= px < width and 0 <= py < height:
                             falloff = 1.0 - (dist / max(size, 1))
                             pixel_alpha = int(alpha * falloff)
-                            # Additive blending (take max to not overwrite brighter pixels)
                             frame[py, px, 3] = max(frame[py, px, 3], pixel_alpha)
         
         return frame
@@ -258,12 +415,13 @@ def _create_dust_particles(width, height, duration, num_particles=30):
 
 # ─── MoviePy Video Creation ──────────────────────────────────────────────────
 
-def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, duration=15, theme_key=None):
     """
     Create a cinematic reel using MoviePy for smoother effects.
     
     Enhanced features:
-    - Ken Burns zoom with randomized direction (zoom in, zoom out, pan)
+    - Ken Burns zoom with randomized direction
+    - Color grading with cinematic themes
     - Dark text backdrop for guaranteed readability
     - Floating dust particles for cinematic atmosphere
     - Cinematic vignette overlay
@@ -272,6 +430,14 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     """
     import numpy as np
     from PIL import Image
+    
+    # Pick a random theme if none specified
+    if theme_key is None:
+        theme_key = get_random_theme()
+    
+    theme = COLOR_THEMES.get(theme_key, {})
+    theme_name = theme.get("name", theme_key)
+    print(f"   🎨 Color theme: {theme_name}")
     
     output_path = os.path.join(temp_dir, "reel.mp4")
     
@@ -283,10 +449,9 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     # Randomize Ken Burns direction
     kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down"])
     
-    # Ken Burns zoom: smooth ease-in-out
+    # Ken Burns zoom: smooth ease-in-out + color grading
     def make_ken_burns_frame(t):
         progress = t / duration
-        # Smoothstep for cinematic ease (slow start, fast middle, slow end)
         smooth = progress * progress * (3 - 2 * progress)
         
         h, w = bg_array.shape[:2]
@@ -309,14 +474,14 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
             new_h = int(h / zoom)
             x1 = (w - new_w) // 2
             max_y = h - new_h
-            y1 = int(max_y * (1.0 - smooth))  # Pan from bottom to center
+            y1 = int(max_y * (1.0 - smooth))
         elif kb_mode == "pan_down":
             zoom = 1.08
             new_w = int(w / zoom)
             new_h = int(h / zoom)
             x1 = (w - new_w) // 2
             max_y = h - new_h
-            y1 = int(max_y * smooth)  # Pan from center to bottom
+            y1 = int(max_y * smooth)
         else:
             zoom = 1.0 + 0.12 * smooth
             new_w = int(w / zoom)
@@ -327,14 +492,20 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         cropped = bg_array[y1:y1+new_h, x1:x1+new_w]
         img = Image.fromarray(cropped)
         img = img.resize((w, h), Image.LANCZOS)
-        return np.array(img)
+        frame = np.array(img)
+        
+        # Apply color grading
+        if theme_key:
+            frame = apply_color_matrix_np(frame, theme_key)
+        
+        return frame
     
     zoomed_clip = VideoClip(frame_function=make_ken_burns_frame, duration=duration)
     
     # Build composite layers
     clips = [zoomed_clip]
     
-    # Layer 1: Text backdrop (semi-transparent dark gradient for readability)
+    # Layer 1: Text backdrop
     try:
         backdrop = _create_text_backdrop(REEL_WIDTH, REEL_HEIGHT, duration)
         backdrop = backdrop.with_position(("center", "center"))
@@ -342,7 +513,7 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     except Exception as e:
         print(f"   Text backdrop skipped: {e}")
     
-    # Layer 2: Vignette overlay for cinematic depth
+    # Layer 2: Vignette overlay
     try:
         vignette = _create_vignette_clip(REEL_WIDTH, REEL_HEIGHT, duration)
         vignette = vignette.with_position(("center", "center"))
@@ -350,7 +521,7 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     except Exception as e:
         print(f"   Vignette skipped: {e}")
     
-    # Layer 3: Dust particles for cinematic atmosphere
+    # Layer 3: Dust particles
     try:
         num_particles = random.randint(15, 40)
         dust = _create_dust_particles(REEL_WIDTH, REEL_HEIGHT, duration, num_particles)
@@ -363,27 +534,24 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_text = quote["text"]
         author = quote["author"]
         
-        lines = wrap_quote_text(quote_text, max_chars_per_line=30)
+        lines = wrap_quote_text(quote_text, max_chars_per_line=22)
         wrapped = "\n".join(lines)
         
         quote_font = font_paths.get("quote", "Cormorant-Garamond")
         author_font = font_paths.get("author", "Montserrat")
         
-        # Dynamic font sizing based on quote length
-        # Shorter quotes get bigger text, longer quotes get smaller
-        num_chars = len(quote_text)
-        if num_chars <= 50:
-            q_font_size = 48
-        elif num_chars <= 80:
-            q_font_size = 42
-        elif num_chars <= 120:
-            q_font_size = 38
-        else:
-            q_font_size = 34
-        
-        # Calculate vertical position based on number of lines
-        # More lines = push higher so nothing gets cut off
+        # Dynamic font sizing: more lines = smaller text
         num_lines = len(lines)
+        if num_lines <= 3:
+            q_font_size = 44
+        elif num_lines <= 5:
+            q_font_size = 38
+        elif num_lines <= 7:
+            q_font_size = 34
+        else:
+            q_font_size = 30
+        
+        # Smart vertical positioning: more lines = push higher
         if num_lines <= 2:
             quote_y = 0.38
         elif num_lines <= 3:
@@ -400,7 +568,7 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
             color="white",
             font=quote_font,
             text_align="center",
-            size=(880, None),  # Slightly narrower for safe margins
+            size=(940, None),
             method="caption",
         )
         quote_clip = quote_clip.with_duration(duration - 1.5)
@@ -413,11 +581,11 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         
         author_clip = TextClip(
             text=f"— {author}",
-            font_size=26,
+            font_size=24,
             color="#CCCCCC",
             font=author_font,
             text_align="center",
-            size=(880, None),
+            size=(940, None),
             method="caption",
         )
         author_clip = author_clip.with_duration(duration - 3.0)
@@ -437,7 +605,6 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     if has_music:
         audio = AudioFileClip(music_path)
         if audio.duration < duration:
-            # Loop audio if shorter
             from moviepy import concatenate_audioclips
             repeats = int(duration / audio.duration) + 1
             audio = concatenate_audioclips([audio] * repeats)
@@ -445,9 +612,8 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         audio = audio.with_effects([AudioFadeIn(1.5), AudioFadeOut(3.0)])
         video = video.with_audio(audio)
     
-    print(f"   MoviePy: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}...")
+    print(f"   MoviePy: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}, theme={theme_name}...")
     
-    # Write output
     video.write_videofile(
         output_path,
         fps=DEFAULT_FPS,
@@ -462,7 +628,6 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
     file_size = os.path.getsize(output_path)
     print(f"   MoviePy: video created ({file_size / (1024*1024):.1f} MB)")
     
-    # Clean up
     video.close()
     if has_music:
         audio.close()
@@ -475,7 +640,7 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
 def _generate_vignette_png(temp_dir, width=1080, height=1920):
     """
     Generate a vignette PNG overlay image using PIL.
-    This is MUCH faster than FFmpeg's vignette filter since it's pre-rendered.
+    Pre-rendered for performance.
     """
     try:
         from PIL import Image, ImageDraw
@@ -489,7 +654,7 @@ def _generate_vignette_png(temp_dir, width=1080, height=1920):
         dist = np.sqrt((x - cx)**2 + (y - cy)**2) / np.sqrt(cx**2 + cy**2)
         alpha = np.clip((dist - 0.3) * 200, 0, 160).astype(np.uint8)
         
-        arr[:, :, 3] = alpha  # Black vignette with radial alpha
+        arr[:, :, 3] = alpha
         img = Image.fromarray(arr)
         
         vignette_path = os.path.join(temp_dir, "vignette_overlay.png")
@@ -500,24 +665,25 @@ def _generate_vignette_png(temp_dir, width=1080, height=1920):
         return None
 
 
-def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, duration=15, theme_key=None):
     """
     Create a reel using raw FFmpeg (proven fallback).
-    Enhanced with color grading, vignette overlay, and ASS subtitles.
-    
-    Performance optimization:
-    - Vignette uses a pre-rendered PNG overlay (way faster than FFmpeg vignette filter)
-    - Color grading via eq filter (lightweight)
-    - Single-pass rendering
+    Enhanced with color grading themes, vignette overlay, and ASS subtitles.
     """
+    if theme_key is None:
+        theme_key = get_random_theme()
+    
+    theme = COLOR_THEMES.get(theme_key, {})
+    theme_name = theme.get("name", theme_key)
+    print(f"   🎨 Color theme: {theme_name}")
+    
     output_path = os.path.join(temp_dir, "reel.mp4")
-    subtitle_path = create_subtitle_file(quote, temp_dir, font_paths)
+    subtitle_path = create_subtitle_file(quote, temp_dir, font_paths, theme_key)
     
     fps = DEFAULT_FPS
     total_frames = duration * fps
     zoom_increment = 0.12 / total_frames
     
-    # Randomize Ken Burns direction
     kb_mode = random.choice(["zoom_in", "zoom_out"])
     
     if kb_mode == "zoom_in":
@@ -525,13 +691,15 @@ def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, dura
     else:
         zoom_expr = f"1.12-{zoom_increment}*on"
     
-    # Generate vignette PNG overlay (fast — pre-rendered)
     vignette_path = _generate_vignette_png(temp_dir)
+    
+    # Get theme's FFmpeg filter parameters
+    ffmpeg_mixer = theme.get("ffmpeg_mixer", "1:0:0:0:0:1:0:0:0:0:0:1")
+    ffmpeg_eq = theme.get("ffmpeg_eq", "brightness=0.02:contrast=1.1:saturation=0.85:gamma=0.95")
     
     cmd = ["ffmpeg", "-y"]
     cmd.extend(["-loop", "1", "-t", str(duration), "-i", image_path])
     
-    # Add vignette overlay as second video input
     if vignette_path:
         cmd.extend(["-loop", "1", "-t", str(duration), "-i", vignette_path])
     
@@ -541,31 +709,25 @@ def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, dura
     else:
         cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono"])
     
-    # Build video filter chain
     if vignette_path:
-        # Inputs: 0=bg_image, 1=vignette_png, 2=music_or_silent
         video_filters = [
-            # Step 1: Scale, crop, zoom, color grade the background
-            f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps},eq=brightness=0.02:contrast=1.1:saturation=0.85:gamma=0.95[bg]",
-            # Step 2: Overlay vignette PNG on top
+            f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps},colorchannelmixer={ffmpeg_mixer},{ffmpeg_eq}[bg]",
             f"[1:v][bg]overlay=0:0:format=auto[vo]",
-            # Step 3: ASS subtitle overlay
             f"[vo]ass={subtitle_path}[v]",
         ]
         cmd.extend(["-filter_complex", ";".join(video_filters)])
         
-        # Audio filters and mapping
         if has_music:
             cmd.extend(["-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3"])
-            cmd.extend(["-map", "[v]", "-map", "2:a"])  # Audio is input #2
+            cmd.extend(["-map", "[v]", "-map", "2:a"])
         else:
-            cmd.extend(["-map", "[v]", "-map", "2:a"])  # Silent audio is input #2
+            cmd.extend(["-map", "[v]", "-map", "2:a"])
     else:
-        # Inputs: 0=bg_image, 1=music_or_silent
         video_filters = [
             "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
             f"zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
-            "eq=brightness=0.02:contrast=1.1:saturation=0.85:gamma=0.95",
+            f"colorchannelmixer={ffmpeg_mixer}",
+            ffmpeg_eq,
             f"ass={subtitle_path}",
         ]
         cmd.extend(["-vf", ",".join(video_filters)])
@@ -587,17 +749,16 @@ def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, dura
         output_path
     ])
     
-    print(f"   FFmpeg: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}...")
+    print(f"   FFmpeg: rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, mode={kb_mode}, theme={theme_name}...")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
         if result.returncode != 0:
-            # If the vignette overlay failed, retry without it
             print(f"   FFmpeg vignette overlay failed — retrying without vignette...")
             return _create_reel_ffmpeg_simple(
                 image_path, music_path, subtitle_path, temp_dir, duration, 
-                zoom_expr, total_frames, fps, kb_mode
+                zoom_expr, total_frames, fps, kb_mode, theme_key
             )
         
         file_size = os.path.getsize(output_path)
@@ -611,11 +772,15 @@ def create_reel_ffmpeg(image_path, music_path, quote, temp_dir, font_paths, dura
 
 
 def _create_reel_ffmpeg_simple(image_path, music_path, subtitle_path, temp_dir, 
-                                duration, zoom_expr, total_frames, fps, kb_mode):
-    """
-    Simplified FFmpeg fallback — no vignette overlay, just the basics.
-    Used if the complex filter chain fails.
-    """
+                                duration, zoom_expr, total_frames, fps, kb_mode, theme_key=None):
+    """Simplified FFmpeg fallback — no vignette overlay, just the basics."""
+    if theme_key is None:
+        theme_key = get_random_theme()
+    theme = COLOR_THEMES.get(theme_key, {})
+    theme_name = theme.get("name", theme_key)
+    ffmpeg_mixer = theme.get("ffmpeg_mixer", "1:0:0:0:0:1:0:0:0:0:0:1")
+    ffmpeg_eq = theme.get("ffmpeg_eq", "brightness=0.02:contrast=1.1:saturation=0.85")
+    
     output_path = os.path.join(temp_dir, "reel.mp4")
     
     cmd = ["ffmpeg", "-y"]
@@ -630,7 +795,8 @@ def _create_reel_ffmpeg_simple(image_path, music_path, subtitle_path, temp_dir,
     video_filters = [
         "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
         f"zoompan=z='{zoom_expr}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
-        "eq=brightness=0.02:contrast=1.1:saturation=0.85",
+        f"colorchannelmixer={ffmpeg_mixer}",
+        ffmpeg_eq,
         f"ass={subtitle_path}",
     ]
     
@@ -652,7 +818,7 @@ def _create_reel_ffmpeg_simple(image_path, music_path, subtitle_path, temp_dir,
         output_path
     ])
     
-    print(f"   FFmpeg (simple): rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s...")
+    print(f"   FFmpeg (simple): rendering {REEL_WIDTH}x{REEL_HEIGHT}, {duration}s, theme={theme_name}...")
     
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     
@@ -666,7 +832,7 @@ def _create_reel_ffmpeg_simple(image_path, music_path, subtitle_path, temp_dir,
 
 # ─── Main Entry Point ────────────────────────────────────────────────────────
 
-def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15):
+def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15, theme_key=None):
     """
     Create a 15-second Instagram Reel video.
     
@@ -680,25 +846,27 @@ def create_reel(image_path, music_path, quote, temp_dir, font_paths, duration=15
         temp_dir: Directory for temporary files
         font_paths: Dict with 'quote' and 'author' font paths
         duration: Video duration in seconds (default 15)
+        theme_key: Color grading theme key (random if None)
     
     Returns:
         str: Path to the created video file
     """
-    # Try MoviePy first for cinematic quality
+    if theme_key is None:
+        theme_key = get_random_theme()
+    
     if HAS_MOVIEPY:
         try:
             print(f"   MoviePy available — creating enhanced cinematic reel...")
             return create_reel_moviepy(
-                image_path, music_path, quote, temp_dir, font_paths, duration
+                image_path, music_path, quote, temp_dir, font_paths, duration, theme_key
             )
         except Exception as e:
             print(f"   MoviePy failed: {e}")
             print(f"   Falling back to FFmpeg pipeline...")
     
-    # FFmpeg fallback (always works)
     print(f"   Using enhanced FFmpeg pipeline...")
     return create_reel_ffmpeg(
-        image_path, music_path, quote, temp_dir, font_paths, duration
+        image_path, music_path, quote, temp_dir, font_paths, duration, theme_key
     )
 
 

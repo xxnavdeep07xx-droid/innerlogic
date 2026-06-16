@@ -447,8 +447,8 @@ def upload_reel_with_instagram_music(cl, video_path, caption, track_info, histor
                 caption=caption,
                 track=raw_track,
                 thumbnail=thumbnail_path,
-                music_volume=0.7,
-                original_volume=0.3,
+                music_volume=1.0,
+                original_volume=0.0,
                 audio_asset_start_time=0,
                 extra_data={
                     "source_type": "4",
@@ -481,8 +481,8 @@ def upload_reel_with_instagram_music(cl, video_path, caption, track_info, histor
             logger.info("   🔄 Method 2: clip_music_extra_data + clip_upload...")
             music_data = cl.clip_music_extra_data(
                 track=raw_track,
-                music_volume=0.7,
-                original_volume=0.3,
+                music_volume=1.0,
+                original_volume=0.0,
             )
             
             media = cl.clip_upload(
