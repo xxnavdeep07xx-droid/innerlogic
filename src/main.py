@@ -445,20 +445,22 @@ def _generate_minimal_audio(temp_dir):
     it to be completely silent so that the Instagram native music
     can play at full volume without any interference.
     
-    Uses digital silence (anullsrc) instead of brown noise, which
-    was interfering with Instagram's server-side music mixing.
+    Uses digital silence (anullsrc) in AAC format for best compatibility.
+    NOTE: With clip_upload_as_reel_with_music (Method 1), the audio
+    gets replaced by the downloaded music track anyway. This silent
+    audio is just a placeholder for the video container.
     """
     import subprocess
     
-    output_path = os.path.join(temp_dir, "silent_audio.mp3")
+    output_path = os.path.join(temp_dir, "silent_audio.m4a")
     
-    # Method 1: True digital silence (best for IG native music)
+    # Method 1: True digital silence in AAC format
     try:
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
             "-t", "16",
-            "-c:a", "libmp3lame", "-b:a", "128k",
+            "-c:a", "aac", "-b:a", "128k",
             output_path
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=15)
@@ -470,19 +472,20 @@ def _generate_minimal_audio(temp_dir):
     except Exception as e:
         print(f"   ⚠️ Silent audio method 1 failed: {e}")
     
-    # Method 2: Very short silent audio as absolute fallback
+    # Method 2: MP3 format as fallback
+    output_path_mp3 = os.path.join(temp_dir, "silent_audio.mp3")
     try:
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
             "-t", "16",
-            "-c:a", "aac", "-b:a", "64k",
-            output_path.replace(".mp3", ".m4a")
+            "-c:a", "libmp3lame", "-b:a", "128k",
+            output_path_mp3
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=15)
-        if result.returncode == 0 and os.path.exists(output_path.replace(".mp3", ".m4a")):
-            print(f"   🔇 Silent audio (AAC) created")
-            return output_path.replace(".mp3", ".m4a")
+        if result.returncode == 0 and os.path.exists(output_path_mp3):
+            print(f"   🔇 Silent audio (MP3) created")
+            return output_path_mp3
     except Exception:
         pass
     

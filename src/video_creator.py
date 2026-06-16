@@ -216,12 +216,15 @@ def apply_color_matrix_np(frame, theme_key):
 
 # ─── Text Wrapping ────────────────────────────────────────────────────────────
 
-def wrap_quote_text(text, max_chars_per_line=25):
+def wrap_quote_text(text, max_chars_per_line=28):
     """
     Wrap quote text for screen display.
-    Returns a list of lines, each within the max character limit.
-    Uses 25 chars per line to ensure text fits within the container
-    without being cut off on any device.
+    Uses 28 chars per line to stay within Instagram's safe zone.
+    
+    Instagram's UI overlay zones:
+      - Top 12%: Reels header, camera icon
+      - Bottom 28%: Username, music credit, like/comment/share, caption
+    Safe zone for text: 12% to 68% from top (about 230px to 1310px)
     """
     words = text.split()
     lines = []
@@ -239,9 +242,9 @@ def wrap_quote_text(text, max_chars_per_line=25):
     if current_line:
         lines.append(current_line)
     
-    # Safety: limit to 8 lines max to avoid vertical overflow
-    if len(lines) > 8:
-        while len(lines) > 7:
+    # Safety: limit to 6 lines max (safe zone is limited)
+    if len(lines) > 6:
+        while len(lines) > 5:
             last = lines.pop()
             lines[-1] = lines[-1] + " " + last
     
@@ -258,7 +261,7 @@ def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     quote_text = quote["text"]
     author = quote["author"]
     
-    lines = wrap_quote_text(quote_text, max_chars_per_line=25)
+    lines = wrap_quote_text(quote_text, max_chars_per_line=28)
     wrapped_text = "\\N".join(lines)
     
     quote_fontname = font_paths.get("quote", "Cormorant Garamond")
@@ -266,10 +269,13 @@ def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     
     num_lines = len(lines)
     total_text_lines = num_lines + 1
-    line_height = 56
+    line_height = 50
     total_height = total_text_lines * line_height
-    # Center vertically, slightly above middle (around 40% from top)
-    start_y = int((1920 - total_height) / 2) - 60
+    # Position text in Instagram's safe zone (12%-68% from top)
+    # Target: center the text block around 40% from top = 768px
+    target_center = int(1920 * 0.40)  # 768px
+    start_y = target_center - (total_height // 2)
+    start_y = max(start_y, 230)  # Don't go above 12%
     
     # Fade timing
     quote_start = "0:00:00.80"
@@ -281,15 +287,16 @@ def create_subtitle_file(quote, temp_dir, font_paths, theme_key=None):
     author_fade = r"{\fade(255,255,0,0,180,1250,1350)}"
     
     # Dynamic font size based on quote length
+    # Conservative sizes to stay within Instagram's safe zone
     num_chars = len(quote_text)
     if num_chars <= 50:
-        q_font_size = 44
-    elif num_chars <= 80:
         q_font_size = 40
-    elif num_chars <= 120:
+    elif num_chars <= 80:
         q_font_size = 36
-    else:
+    elif num_chars <= 120:
         q_font_size = 32
+    else:
+        q_font_size = 28
     
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
@@ -301,7 +308,7 @@ WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,2,0,1,3,3,8,80,80,{start_y},1
-Style: Author,{author_fontname},26,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,2,8,80,80,{start_y + num_lines * 56 + 25},1
+Style: Author,{author_fontname},24,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,2,8,80,80,{start_y + num_lines * 50 + 20},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -344,8 +351,9 @@ def _create_text_backdrop(width, height, duration):
     
     img = np.zeros((height, width, 4), dtype=np.uint8)
     
-    center_y_start = int(height * 0.25)
-    center_y_end = int(height * 0.75)
+    # Match the Instagram safe zone (12%-68% from top)
+    center_y_start = int(height * 0.12)
+    center_y_end = int(height * 0.68)
     center_y_mid = (center_y_start + center_y_end) // 2
     
     for y in range(center_y_start, center_y_end):
@@ -534,41 +542,40 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_text = quote["text"]
         author = quote["author"]
         
-        lines = wrap_quote_text(quote_text, max_chars_per_line=22)
+        lines = wrap_quote_text(quote_text, max_chars_per_line=28)
         wrapped = "\n".join(lines)
         
         quote_font = font_paths.get("quote", "Cormorant-Garamond")
         author_font = font_paths.get("author", "Montserrat")
         
-        # Dynamic font sizing: more lines = smaller text
+        # Dynamic font sizing: conservative sizes for Instagram safe zone
         num_lines = len(lines)
-        if num_lines <= 3:
-            q_font_size = 44
-        elif num_lines <= 5:
-            q_font_size = 38
-        elif num_lines <= 7:
-            q_font_size = 34
-        else:
-            q_font_size = 30
-        
-        # Smart vertical positioning: more lines = push higher
         if num_lines <= 2:
-            quote_y = 0.38
+            q_font_size = 42
         elif num_lines <= 3:
-            quote_y = 0.33
+            q_font_size = 36
         elif num_lines <= 4:
-            quote_y = 0.28
+            q_font_size = 32
         else:
-            quote_y = 0.24
+            q_font_size = 28
         
-        # Quote text
+        # Instagram safe zone: 12%-68% from top
+        est_block_height = num_lines * (q_font_size * 1.3)
+        block_center_rel = 0.40
+        block_height_rel = est_block_height / REEL_HEIGHT
+        quote_y = block_center_rel - (block_height_rel / 2)
+        quote_y = max(quote_y, 0.14)
+        max_quote_y = 0.60 - block_height_rel
+        quote_y = min(quote_y, max(0.14, max_quote_y))
+        
+        # Quote text — width 900px (leave 90px margin each side)
         quote_clip = TextClip(
             text=wrapped,
             font_size=q_font_size,
             color="white",
             font=quote_font,
             text_align="center",
-            size=(940, None),
+            size=(900, None),
             method="caption",
         )
         quote_clip = quote_clip.with_duration(duration - 1.5)
@@ -576,16 +583,16 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_clip = quote_clip.with_effects([FadeIn(1.0), FadeOut(2.0)])
         clips.append(quote_clip)
         
-        # Author text — positioned below quote with smart offset
-        author_y = min(quote_y + 0.05 * num_lines + 0.08, 0.72)
+        # Author text — capped at 62% to avoid IG bottom UI overlay
+        author_y = min(quote_y + block_height_rel + 0.02, 0.62)
         
         author_clip = TextClip(
-            text=f"— {author}",
-            font_size=24,
+            text=f"\u2014 {author}",
+            font_size=22,
             color="#CCCCCC",
             font=author_font,
             text_align="center",
-            size=(940, None),
+            size=(900, None),
             method="caption",
         )
         author_clip = author_clip.with_duration(duration - 3.0)
