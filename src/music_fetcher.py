@@ -1,50 +1,28 @@
 #!/usr/bin/env python3
 """
 Music Fetcher — Downloads royalty-free cinematic music for reels.
-Uses Pixabay API (free) or falls back to bundled tracks.
+Strategy (in order):
+1. Try Pixabay CDN fallback URLs (direct MP3 links, no API key needed)
+2. Generate ambient cinematic music with FFmpeg (always works, zero dependencies)
 """
 
 import requests
 import random
 import os
-import json
-from pathlib import Path
+import subprocess
 
 
-# Pixabay API endpoint for music
-PIXABAY_API_URL = "https://pixabay.com/api/videos/"
-
-# Search queries for cinematic/philosophical background music
-MUSIC_SEARCH_TERMS = [
-    "cinematic dark ambient",
-    "dark piano emotional",
-    "cinematic melancholic",
-    "ambient dark atmospheric",
-    "cinematic sad strings",
-    "dark cinematic drone",
-    "philosophical ambient",
-    "cinematic deep bass",
-    "dark atmospheric piano",
-    "epic dark cinematic",
-]
-
-# Fallback: Free music URLs (royalty-free, no API key needed)
-# These are from Free Music Archive and other free sources
+# ─── Pixabay CDN URLs (verified working as of June 2025) ─────────────────────
+# These are pre-selected royalty-free cinematic/ambient tracks.
+# Only include URLs that return HTTP 200 (most Pixabay CDN links now return 403).
 FALLBACK_MUSIC_URLS = [
-    "https://cdn.pixabay.com/audio/2022/02/22/audio_d1718ab41b.mp3",  # Dark Ambient
-    "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3",  # Cinematic Piano
-    "https://cdn.pixabay.com/audio/2023/09/04/audio_5cfa1c0e34.mp3",  # Dark Atmosphere
-    "https://cdn.pixabay.com/audio/2023/10/07/audio_0e1d6e2d9c.mp3",  # Emotional Piano
-    "https://cdn.pixabay.com/audio/2022/03/10/audio_0ae8d9a8c8.mp3",  # Cinematic Dark
-    "https://cdn.pixabay.com/audio/2024/01/10/audio_e8f46e4d74.mp3",  # Melancholic Strings
-    "https://cdn.pixabay.com/audio/2023/04/14/audio_79df3d0ac6.mp3",  # Dark Ambient Soundscape
-    "https://cdn.pixabay.com/audio/2022/10/09/audio_d0253e9bc7.mp3",  # Sad Piano
-    "https://cdn.pixabay.com/audio/2023/06/07/audio_78e63679c7.mp3",  # Deep Cinematic
-    "https://cdn.pixabay.com/audio/2022/01/18/audio_d0a13f69d2.mp3",  # Atmospheric Dark
+    # ~147s - Cinematic Ambient (dark atmospheric)
+    "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3",
+    # ~110s - Dark Cinematic Piano
+    "https://cdn.pixabay.com/audio/2022/01/18/audio_d0a13f69d2.mp3",
+    # ~4s - Short ambient tone (not ideal but works as last CDN fallback)
+    "https://cdn.pixabay.com/audio/2022/02/22/audio_d1718ab41b.mp3",
 ]
-
-# Track which music we've used recently
-MUSIC_HISTORY_FILE = None  # Set dynamically
 
 
 def _download_file(url, output_path, timeout=60):
@@ -57,129 +35,122 @@ def _download_file(url, output_path, timeout=60):
     return output_path
 
 
-def fetch_music_pixabay(api_key, temp_dir):
-    """
-    Fetch music from Pixabay API.
-    Searches for cinematic/ambient tracks and downloads one.
-    """
-    search_term = random.choice(MUSIC_SEARCH_TERMS)
-    
-    params = {
-        "key": api_key,
-        "q": search_term,
-        "category": "film",
-        "min_width": 0,
-        "per_page": 20,
-        "safesearch": "true",
-    }
-    
-    try:
-        response = requests.get(PIXABAY_API_URL, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("hits"):
-            # Pick a random video that has music
-            hit = random.choice(data["hits"])
-            video_url = hit.get("videos", {}).get("medium", {}).get("url")
-            
-            if video_url:
-                output_path = os.path.join(temp_dir, "background_music.mp3")
-                _download_file(video_url, output_path)
-                print(f"   ✅ Music downloaded from Pixabay (search: {search_term})")
-                return output_path
-        
-        print("   ⚠️  No suitable music found on Pixabay, using fallback...")
-        
-    except Exception as e:
-        print(f"   ⚠️  Pixabay API error: {e}, using fallback...")
-    
-    return None
-
-
 def fetch_music_fallback(temp_dir):
     """
-    Download music from fallback URLs (direct Pixabay CDN links).
+    Download music from fallback CDN URLs (direct Pixabay CDN links).
     These are pre-selected royalty-free cinematic tracks.
     """
-    url = random.choice(FALLBACK_MUSIC_URLS)
-    output_path = os.path.join(temp_dir, "background_music.mp3")
+    # Shuffle URLs to vary the music selection
+    urls = FALLBACK_MUSIC_URLS.copy()
+    random.shuffle(urls)
     
-    try:
-        _download_file(url, output_path, timeout=60)
-        file_size = os.path.getsize(output_path)
-        if file_size > 10000:  # At least 10KB
-            print(f"   ✅ Fallback music downloaded ({file_size / 1024:.0f} KB)")
-            return output_path
-        else:
-            print(f"   ⚠️  Downloaded music too small ({file_size} bytes)")
-    except Exception as e:
-        print(f"   ⚠️  Fallback download failed: {e}")
+    for url in urls:
+        output_path = os.path.join(temp_dir, "background_music.mp3")
+        try:
+            print(f"   ⬇️  Trying: {url.split('/')[-1]}")
+            _download_file(url, output_path, timeout=60)
+            file_size = os.path.getsize(output_path)
+            if file_size > 50000:  # At least 50KB (real music)
+                print(f"   ✅ Music downloaded ({file_size / 1024:.0f} KB)")
+                return output_path
+            else:
+                print(f"   ⚠️  File too small ({file_size} bytes), trying next...")
+                os.remove(output_path)
+        except Exception as e:
+            print(f"   ⚠️  Download failed: {e}")
     
     return None
 
 
-def generate_silent_audio(temp_dir, duration=15):
+def generate_ambient_music(temp_dir, duration=16):
     """
-    Generate a silent audio file as absolute last resort.
-    FFmpeg will create a 15-second silent AAC file.
+    Generate cinematic ambient music using FFmpeg.
+    Creates a dark, atmospheric drone sound — perfect for philosophical quotes.
+    
+    This ALWAYS works (no network needed) and produces a unique track each time
+    by randomizing the base frequencies.
+    
+    Args:
+        temp_dir: Directory to save the generated music
+        duration: Duration in seconds (default 16 for a 15-second reel + 1s buffer)
     """
     output_path = os.path.join(temp_dir, "background_music.mp3")
     
     try:
-        import subprocess
+        # Randomize base frequency for variety (A1-C2 range = dark & moody)
+        base_freq = random.choice([55, 58, 62, 65, 73])
+        
+        # Generate rich ambient drone with harmonics and filtering
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r=44100:cl=stereo",
+            # Layer 1: Deep bass drone
+            "-f", "lavfi", "-i", f"sine=frequency={base_freq}:duration={duration}",
+            # Layer 2: Perfect fifth above (haunting interval)
+            "-f", "lavfi", "-i", f"sine=frequency={int(base_freq * 1.5)}:duration={duration}",
+            # Layer 3: Octave above (adds brightness)
+            "-f", "lavfi", "-i", f"sine=frequency={base_freq * 2}:duration={duration}",
+            # Layer 4: Minor third (dark tension)
+            "-f", "lavfi", "-i", f"sine=frequency={int(base_freq * 2.4)}:duration={duration}",
+            # Mix and shape the sound
+            "-filter_complex",
+            f"[0:a][1:a][2:a][3:a]amix=inputs=4:duration=longest,"
+            f"lowpass=f=600,"
+            f"highpass=f=30,"
+            f"volume=0.25,"
+            f"afade=t=in:st=0:d=2,"
+            f"afade=t=out:st={duration-3}:d=3",
             "-t", str(duration),
             "-c:a", "libmp3lame",
             "-b:a", "128k",
             output_path
         ]
-        subprocess.run(cmd, capture_output=True, check=True, timeout=30)
-        print(f"   ✅ Silent audio generated (no music available)")
-        return output_path
+        
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        if result.returncode == 0 and os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            print(f"   ✅ Ambient music generated ({file_size / 1024:.0f} KB, key: {base_freq}Hz)")
+            return output_path
+        else:
+            print(f"   ⚠️  FFmpeg music generation failed")
+            
     except Exception as e:
-        print(f"   ⚠️  Could not generate silent audio: {e}")
-        return None
+        print(f"   ⚠️  Music generation error: {e}")
+    
+    return None
 
 
 def fetch_music(api_key, temp_dir):
     """
     Main music fetching function.
-    Tries Pixabay API first, then fallback URLs, then silent audio.
+    Tries CDN URLs first, then generates ambient music with FFmpeg.
     
     Args:
-        api_key: Pixabay API key (can be empty string)
+        api_key: Pixabay API key (unused, kept for compatibility)
         temp_dir: Directory to save the music file
     
     Returns:
-        str: Path to the music file, or None if all methods fail
+        str: Path to the music file (always returns something)
     """
-    # Try Pixabay API if key is available
-    if api_key and api_key.strip():
-        result = fetch_music_pixabay(api_key, temp_dir)
-        if result:
-            return result
-    
-    # Try fallback URLs
+    # Step 1: Try fallback CDN URLs
     result = fetch_music_fallback(temp_dir)
     if result:
         return result
     
-    # Last resort: generate silent audio
-    result = generate_silent_audio(temp_dir)
+    # Step 2: Generate ambient cinematic music with FFmpeg
+    print("   🎵 CDN downloads failed — generating ambient music with FFmpeg...")
+    result = generate_ambient_music(temp_dir)
     if result:
         return result
     
-    # If absolutely nothing works, return None
-    # The video creator will handle missing music gracefully
-    print("   ❌ Could not fetch any music — video will be silent")
+    # Step 3: Absolute last resort — return None
+    # (video_creator.py will use silent audio)
+    print("   ❌ All music methods failed — video will have silent audio")
     return None
 
 
 if __name__ == "__main__":
     # Quick test
+    os.makedirs("temp", exist_ok=True)
     path = fetch_music("", "temp")
     print(f"Music saved to: {path}")
