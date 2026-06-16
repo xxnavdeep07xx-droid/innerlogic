@@ -57,24 +57,29 @@ jobs:
           INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
           INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          # Pixabay API key (optional — adds thousands of music tracks)
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           # Smart scheduling ON for cron, OFF for manual triggers (post immediately)
           SMART_SCHEDULING: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           python3 src/main.py
 
-      - name: 💾 Save performance data
+      - name: 💾 Save performance & music data
         if: always()
         run: |
+          git config --global user.name "InnerLogic Bot"
+          git config --global user.email "bot@innerlogic.dev"
           if [ -f data/post_performance.json ]; then
-            git config --global user.name "InnerLogic Bot"
-            git config --global user.email "bot@innerlogic.dev"
             git add data/post_performance.json
-            git diff --cached --quiet || git commit -m "📊 Update post performance data"
-            git push
-            echo "Performance data saved"
-          else
-            echo "No performance data to save"
+            echo "Performance data staged"
           fi
+          if [ -f data/music_history.json ]; then
+            git add data/music_history.json
+            echo "Music history staged"
+          fi
+          git diff --cached --quiet || git commit -m "📊 Update performance & music data"
+          git push
+          echo "Data saved"
 
       - name: 🧹 Cleanup
         if: always()
