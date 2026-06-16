@@ -59,6 +59,8 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           # Pixabay API key (optional — adds thousands of music tracks)
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          # Freesound API token (optional — adds 500K+ CC-licensed sounds)
+          FREESOUND_TOKEN: ${{ secrets.FREESOUND_TOKEN }}
           # Smart scheduling ON for cron, OFF for manual triggers (post immediately)
           SMART_SCHEDULING: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |

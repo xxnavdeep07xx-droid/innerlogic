@@ -58,6 +58,7 @@ INSTAGRAM_TOTP_SECRET = os.environ.get("INSTAGRAM_TOTP_SECRET", "")
 # API keys (optional)
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 PIXABAY_API_KEY = os.environ.get("PIXABAY_API_KEY", "")
+FREESOUND_TOKEN = os.environ.get("FREESOUND_TOKEN", "")
 
 # Smart scheduling: Set to "true" to auto-find the best posting time
 SMART_SCHEDULING = os.environ.get("SMART_SCHEDULING", "true").lower() == "true"
@@ -131,9 +132,9 @@ def main():
         image_path = generate_image(quote, str(TEMP_DIR))
         logger.info(f"   🖼️  Image saved: {image_path}")
         
-        # Step 4: Fetch music (Pixabay API key optional — 4-tier fallback ensures music always works)
+        # Step 4: Fetch music (6-tier fallback: Freesound → Pixabay → Mixkit → CDN → FFmpeg)
         logger.info("🎵 Step 4/8: Downloading royalty-free music...")
-        music_path = fetch_music(PIXABAY_API_KEY, str(TEMP_DIR))
+        music_path = fetch_music(PIXABAY_API_KEY, str(TEMP_DIR), FREESOUND_TOKEN)
         logger.info(f"   🎶 Music saved: {music_path}")
         
         # Step 5: Create video reel

@@ -2,12 +2,13 @@
 """
 Music Fetcher — Downloads royalty-free cinematic music for reels.
 
-5-Tier Strategy (in order of quality & variety):
-1. Pixabay API    — thousands of real tracks (needs free API key)
-2. Mixkit SFX     — 20+ atmospheric/ambient tracks, free, no auth (WAV)
-3. Pixabay CDN    — 2 verified working direct MP3 links (no key needed)
-4. FFmpeg Ambient — 10 unique generated styles with infinite variations
-5. Silent audio   — last resort (never actually silent thanks to Tier 4)
+6-Tier Strategy (in order of quality & variety):
+1. Freesound API  — 500K+ CC-licensed sounds (free API token)
+2. Pixabay API    — thousands of real tracks (needs free API key)
+3. Mixkit SFX     — 20+ atmospheric/ambient tracks, free, no auth (WAV)
+4. Pixabay CDN    — 2 verified working direct MP3 links (no key needed)
+5. FFmpeg Ambient — 10 unique generated styles with infinite variations
+6. Silent audio   — last resort (never actually silent thanks to Tier 5)
 
 Track History: Rotates through sources to avoid repeating the same track.
 """
@@ -400,25 +401,140 @@ def _download_file(url, output_path, timeout=60):
     return output_path
 
 
-def _convert_wav_to_mp3(wav_path, mp3_path):
-    """Convert WAV to MP3 using FFmpeg (smaller file, Instagram compatible)."""
+def _convert_to_mp3(input_path, mp3_path):
+    """Convert any audio file to MP3 using FFmpeg (smaller file, Instagram compatible)."""
     try:
         cmd = [
             "ffmpeg", "-y",
-            "-i", wav_path,
+            "-i", input_path,
             "-c:a", "libmp3lame", "-b:a", "128k",
             mp3_path
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=30)
         if result.returncode == 0 and os.path.exists(mp3_path):
-            os.remove(wav_path)  # Clean up WAV
+            if input_path != mp3_path:
+                os.remove(input_path)  # Clean up original
             return True
     except Exception:
         pass
     return False
 
 
-# ─── Tier 1: Pixabay API ─────────────────────────────────────────────────────
+# ─── Tier 1: Freesound API ───────────────────────────────────────────────────
+
+# Freesound search queries optimized for philosophical/cinematic content
+FREESOUND_QUERIES = [
+    {"query": "dark ambient cinematic", "filter": "duration:[10 TO 300]"},
+    {"query": "cinematic piano sad", "filter": "duration:[10 TO 180]"},
+    {"query": "atmospheric drone", "filter": "duration:[15 TO 300]"},
+    {"query": "dark cinematic tension", "filter": "duration:[10 TO 180]"},
+    {"query": "ethereal ambient pad", "filter": "duration:[15 TO 300]"},
+    {"query": "melancholic strings", "filter": "duration:[10 TO 180]"},
+    {"query": "mysterious dark", "filter": "duration:[10 TO 180]"},
+    {"query": "philosophical ambient", "filter": "duration:[15 TO 300]"},
+    {"query": "rain ambient dark", "filter": "duration:[15 TO 300]"},
+    {"query": "space ambient cosmic", "filter": "duration:[15 TO 300]"},
+    {"query": "horror ambient atmosphere", "filter": "duration:[10 TO 180]"},
+    {"query": "suspense dark background", "filter": "duration:[10 TO 120]"},
+    {"query": "meditation drone deep", "filter": "duration:[20 TO 300]"},
+    {"query": "cinematic emotional piano", "filter": "duration:[10 TO 180]"},
+    {"query": "dark synth pad", "filter": "duration:[10 TO 180]"},
+]
+
+
+def fetch_music_freesound(freesound_token, temp_dir, history=None):
+    """
+    Search and download CC-licensed sounds from Freesound API.
+    Free API token at: https://freesound.org/apiv2/apply/
+    
+    Access levels with token:
+    - Search: Full text search with filters (duration, tags, license)
+    - Preview download: HQ MP3 preview (~128kbps) — perfect for 15s reels
+    - Full download: Requires OAuth2 (not needed for our use case)
+    
+    Returns: Path to MP3 file, or None
+    """
+    if not freesound_token or not freesound_token.strip():
+        return None
+    
+    query_params = random.choice(FREESOUND_QUERIES)
+    
+    try:
+        # Search Freesound API
+        search_params = {
+            "query": query_params["query"],
+            "filter": query_params["filter"],
+            "fields": "id,name,duration,previews,tags,license,download",
+            "page_size": 15,
+            "sort": "rating_desc",
+            "token": freesound_token,
+        }
+        
+        response = requests.get(
+            "https://freesound.org/apiv2/search/text/",
+            params=search_params,
+            timeout=20
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get("results", [])
+        if not results:
+            print(f"   Freesound: no results for '{query_params['query']}'")
+            return None
+        
+        # Filter out recently used sounds
+        if history:
+            recent_ids = history.get("recent_freesound_ids", [])
+            fresh_results = [r for r in results if r["id"] not in recent_ids]
+            if fresh_results:
+                results = fresh_results
+        
+        # Pick a random result
+        sound = random.choice(results)
+        sound_id = sound["id"]
+        sound_name = sound.get("name", "unknown")
+        sound_duration = sound.get("duration", 0)
+        
+        print(f"   Freesound: found '{sound_name}' ({sound_duration:.0f}s, ID={sound_id})")
+        
+        # Get the preview URL (HQ MP3, 128kbps — excellent for 15s reels)
+        previews = sound.get("previews", {})
+        preview_url = previews.get("preview-hq-mp3") or previews.get("preview-lq-mp3")
+        
+        if not preview_url:
+            print(f"   Freesound: no preview URL available")
+            return None
+        
+        # Download the preview
+        output_path = os.path.join(temp_dir, "background_music.mp3")
+        _download_file(preview_url, output_path, timeout=60)
+        
+        file_size = os.path.getsize(output_path)
+        if file_size < 30000:
+            print(f"   Freesound: preview too small ({file_size/1024:.0f} KB)")
+            os.remove(output_path)
+            return None
+        
+        print(f"   Freesound: downloaded '{sound_name}' ({file_size/1024:.0f} KB, {sound_duration:.0f}s)")
+        
+        if history:
+            _mark_used("freesound_id", sound_id, history)
+        
+        return output_path
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401:
+            print(f"   Freesound: invalid token — get one at https://freesound.org/apiv2/apply/")
+        else:
+            print(f"   Freesound: HTTP error {e.response.status_code}")
+    except Exception as e:
+        print(f"   Freesound: error — {e}")
+    
+    return None
+
+
+# ─── Tier 2: Pixabay API ─────────────────────────────────────────────────────
 
 def fetch_music_pixabay_api(api_key, temp_dir, history=None):
     """
@@ -529,7 +645,7 @@ def fetch_music_mixkit(temp_dir, history=None):
                 continue
             
             # Convert WAV to MP3 for smaller size & Instagram compatibility
-            if _convert_wav_to_mp3(wav_path, mp3_path):
+            if _convert_to_mp3(wav_path, mp3_path):
                 final_size = os.path.getsize(mp3_path)
                 print(f"   Mixkit music ready ({final_size/1024:.0f} KB, mood: {track['mood']})")
                 if history:
@@ -646,49 +762,58 @@ def generate_ambient_music(temp_dir, duration=16, history=None):
 
 # ─── Main Entry Point ────────────────────────────────────────────────────────
 
-def fetch_music(api_key, temp_dir):
+def fetch_music(api_key, temp_dir, freesound_token=""):
     """
-    Main music fetching function with 5-tier fallback.
+    Main music fetching function with 6-tier fallback.
     
     Priority:
-    1. Pixabay API (thousands of real tracks) — needs free API key
-    2. Mixkit SFX (20+ atmospheric tracks) — free, no auth, WAV→MP3
-    3. Pixabay CDN (2 verified working URLs) — no key needed
-    4. FFmpeg Ambient (10 unique styles, infinite variety) — always works
-    5. Silent audio — absolute last resort
+    1. Freesound API (500K+ CC sounds) — needs free API token
+    2. Pixabay API (thousands of real tracks) — needs free API key
+    3. Mixkit SFX (20+ atmospheric tracks) — free, no auth, WAV→MP3
+    4. Pixabay CDN (2 verified working URLs) — no key needed
+    5. FFmpeg Ambient (10 unique styles, infinite variety) — always works
+    6. Silent audio — absolute last resort
     
     Track History: Remembers recently used tracks to avoid repeats.
     
     Args:
         api_key: Pixabay API key (get free at https://pixabay.com/api/docs/)
         temp_dir: Directory to save the music file
+        freesound_token: Freesound API token (get free at https://freesound.org/apiv2/apply/)
     
     Returns:
         str: Path to the music file (always returns something)
     """
     history = _load_history()
     
-    # Tier 1: Pixabay API (best variety + real music)
+    # Tier 1: Freesound API (500K+ CC-licensed sounds — biggest variety)
+    if freesound_token and freesound_token.strip():
+        print("   [Tier 1/5] Trying Freesound API...")
+        result = fetch_music_freesound(freesound_token, temp_dir, history)
+        if result:
+            return result
+    
+    # Tier 2: Pixabay API (thousands of real music tracks)
     if api_key and api_key.strip():
-        print("   [Tier 1/4] Trying Pixabay API...")
+        print("   [Tier 2/5] Trying Pixabay API...")
         result = fetch_music_pixabay_api(api_key, temp_dir, history)
         if result:
             return result
     
-    # Tier 2: Mixkit SFX (20+ atmospheric tracks, free)
-    print("   [Tier 2/4] Trying Mixkit free music library...")
+    # Tier 3: Mixkit SFX (20+ atmospheric tracks, free)
+    print("   [Tier 3/5] Trying Mixkit free music library...")
     result = fetch_music_mixkit(temp_dir, history)
     if result:
         return result
     
-    # Tier 3: Pixabay CDN (quick fallback)
-    print("   [Tier 3/4] Trying Pixabay CDN fallback...")
+    # Tier 4: Pixabay CDN (quick fallback)
+    print("   [Tier 4/5] Trying Pixabay CDN fallback...")
     result = fetch_music_pixabay_cdn(temp_dir, history)
     if result:
         return result
     
-    # Tier 4: FFmpeg generated music (always works, 10 styles)
-    print("   [Tier 4/4] Generating cinematic music with FFmpeg...")
+    # Tier 5: FFmpeg generated music (always works, 10 styles)
+    print("   [Tier 5/5] Generating cinematic music with FFmpeg...")
     result = generate_ambient_music(temp_dir, history=history)
     if result:
         return result
