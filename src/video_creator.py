@@ -53,7 +53,7 @@ TEXT_DARKEN_OPACITY = 0.45
 
 # ─── Text Wrapping ────────────────────────────────────────────────────────────
 
-def wrap_quote_text(text, max_chars_per_line=28):
+def wrap_quote_text(text, max_chars_per_line=32):
     """
     Wrap quote text for screen display.
     Returns a list of lines, each within the max character limit.
@@ -87,7 +87,7 @@ def create_subtitle_file(quote, temp_dir, font_paths):
     quote_text = quote["text"]
     author = quote["author"]
     
-    lines = wrap_quote_text(quote_text, max_chars_per_line=28)
+    lines = wrap_quote_text(quote_text, max_chars_per_line=32)
     wrapped_text = "\\N".join(lines)
     
     quote_fontname = font_paths.get("quote", "Cormorant Garamond")
@@ -95,7 +95,7 @@ def create_subtitle_file(quote, temp_dir, font_paths):
     
     num_lines = len(lines)
     total_text_lines = num_lines + 1
-    line_height = 64
+    line_height = 56
     total_height = total_text_lines * line_height
     start_y = int((1920 - total_height) / 2)
     
@@ -106,10 +106,19 @@ def create_subtitle_file(quote, temp_dir, font_paths):
     author_end = "0:00:13.50"
     
     # Fade: \fade(a1,a2,a3,t1,t2,t3,t4) — opacity ramp
-    # a1=start_opacity, a2=mid_opacity, a3=end_opacity
-    # t1=fade_in_start, t2=fade_in_end, t3=fade_out_start, t4=fade_out_end (in centiseconds)
     quote_fade = r"{\fade(255,255,0,0,80,1250,1350)}"
     author_fade = r"{\fade(255,255,0,0,180,1250,1350)}"
+    
+    # Dynamic font size based on quote length
+    num_chars = len(quote_text)
+    if num_chars <= 50:
+        q_font_size = 46
+    elif num_chars <= 80:
+        q_font_size = 42
+    elif num_chars <= 120:
+        q_font_size = 38
+    else:
+        q_font_size = 34
     
     ass_content = f"""[Script Info]
 Title: Inner Logic Quote
@@ -120,8 +129,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quote,{quote_fontname},50,&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,3,0,1,4,4,8,100,100,{start_y},1
-Style: Author,{author_fontname},32,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,3,8,100,100,{start_y + num_lines * 64 + 30},1
+Style: Quote,{quote_fontname},{q_font_size},&H00FFFFFF,&H000000FF,&H30000000,&H80000000,-1,0,0,0,100,100,3,0,1,4,4,8,80,80,{start_y},1
+Style: Author,{author_fontname},28,&H80FFFFFF,&H000000FF,&H30000000,&H80000000,0,-1,0,0,100,100,2,0,1,2,3,8,80,80,{start_y + num_lines * line_height + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -354,39 +363,65 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths, dur
         quote_text = quote["text"]
         author = quote["author"]
         
-        lines = wrap_quote_text(quote_text, max_chars_per_line=24)
+        lines = wrap_quote_text(quote_text, max_chars_per_line=30)
         wrapped = "\n".join(lines)
         
         quote_font = font_paths.get("quote", "Cormorant-Garamond")
         author_font = font_paths.get("author", "Montserrat")
         
-        # Quote text — positioned at ~42% from top
+        # Dynamic font sizing based on quote length
+        # Shorter quotes get bigger text, longer quotes get smaller
+        num_chars = len(quote_text)
+        if num_chars <= 50:
+            q_font_size = 48
+        elif num_chars <= 80:
+            q_font_size = 42
+        elif num_chars <= 120:
+            q_font_size = 38
+        else:
+            q_font_size = 34
+        
+        # Calculate vertical position based on number of lines
+        # More lines = push higher so nothing gets cut off
+        num_lines = len(lines)
+        if num_lines <= 2:
+            quote_y = 0.38
+        elif num_lines <= 3:
+            quote_y = 0.33
+        elif num_lines <= 4:
+            quote_y = 0.28
+        else:
+            quote_y = 0.24
+        
+        # Quote text
         quote_clip = TextClip(
             text=wrapped,
-            font_size=46,
+            font_size=q_font_size,
             color="white",
             font=quote_font,
             text_align="center",
-            size=(920, None),
+            size=(880, None),  # Slightly narrower for safe margins
             method="caption",
         )
         quote_clip = quote_clip.with_duration(duration - 1.5)
-        quote_clip = quote_clip.with_position(("center", 0.42), relative=True)
+        quote_clip = quote_clip.with_position(("center", quote_y), relative=True)
         quote_clip = quote_clip.with_effects([FadeIn(1.0), FadeOut(2.0)])
         clips.append(quote_clip)
         
-        # Author text — positioned at ~62% from top
+        # Author text — positioned below quote with smart offset
+        author_y = min(quote_y + 0.05 * num_lines + 0.08, 0.72)
+        
         author_clip = TextClip(
             text=f"— {author}",
-            font_size=28,
-            color="#BBBBBB",
+            font_size=26,
+            color="#CCCCCC",
             font=author_font,
             text_align="center",
-            size=(920, None),
+            size=(880, None),
             method="caption",
         )
         author_clip = author_clip.with_duration(duration - 3.0)
-        author_clip = author_clip.with_position(("center", 0.62), relative=True)
+        author_clip = author_clip.with_position(("center", author_y), relative=True)
         author_clip = author_clip.with_effects([FadeIn(0.8), FadeOut(2.0)])
         clips.append(author_clip)
         

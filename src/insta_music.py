@@ -29,22 +29,28 @@ HISTORY_FILE = DATA_DIR / "music_history.json"
 NO_REPEAT_WINDOW = 5
 
 # Search queries for philosophical/cinematic content
+# Prioritize specific popular tracks known to work well for philosophical reels
 MUSIC_SEARCH_QUERIES = [
-    "dark cinematic",
-    "sad piano",
-    "philosophical",
-    "melancholic",
-    "atmospheric ambient",
-    "deep thought",
-    "emotional cinematic",
-    "dark ambient",
-    "meditative",
-    "ethereal",
-    "moody instrumental",
-    "cinematic drone",
-    "introspective",
-    "dark classical",
-    "haunting piano",
+    "Homage",
+    "Golden Brown",
+    "Maritza",
+    "Blue",
+    "Interstellar",
+    "Time Hans Zimmer",
+    "Experience Ludovico",
+    "Nuvole Bianche",
+    "River Flows in You",
+    "Cinematic Piano",
+    "Epic Emotional",
+    "Dark Atmospheric",
+    "Melancholy Piano",
+    "Mysterious Cinematic",
+    "Philosophical Ambient",
+    "Haunting Beautiful",
+    "Sad Classical",
+    "Deep Thought",
+    "Meditative Calm",
+    "Ethereal Dream",
 ]
 
 # Browse product types for reels
@@ -107,9 +113,10 @@ def search_and_select_track(cl, history=None):
     Search Instagram's music catalog and select a track.
     Uses multiple strategies to find a good track:
     
-    1. Try trending music
-    2. Try keyword search with curated queries
-    3. Try browsing the clips audio browser
+    1. Try searching for specific popular tracks (Homage, Golden Brown, etc.)
+    2. Try trending music
+    3. Try keyword search with curated queries
+    4. Try browsing the clips audio browser
     
     Avoids tracks used in the last 5 reels.
     
@@ -126,6 +133,10 @@ def search_and_select_track(cl, history=None):
     
     track = None
     
+    # Strategy 0: Search for specific preferred tracks first
+    if not track:
+        track = _try_preferred_tracks(cl, history)
+    
     # Strategy 1: Trending music
     if not track:
         track = _try_trending(cl, history)
@@ -139,6 +150,61 @@ def search_and_select_track(cl, history=None):
         track = _try_browse(cl, history)
     
     return track
+
+
+# Preferred tracks — known to work well for philosophical/cinematic reels
+PREFERRED_TRACK_NAMES = [
+    "Homage",
+    "Golden Brown",
+    "Maritza",
+    "Blue",
+    "Interstellar",
+    "Experience",
+    "Nuvole Bianche",
+    "Time",
+]
+
+
+def _try_preferred_tracks(cl, history):
+    """Try to find specific preferred tracks by name."""
+    if not hasattr(cl, 'search_music'):
+        return None
+    
+    # Shuffle preferred tracks to vary selection
+    preferred = PREFERRED_TRACK_NAMES.copy()
+    random.shuffle(preferred)
+    
+    for track_name in preferred[:3]:  # Try top 3
+        try:
+            logger.info(f"   🎵 Insta Music: Looking for '{track_name}'...")
+            results = cl.search_music(track_name)
+            
+            if not results:
+                continue
+            
+            tracks = _extract_tracks(results)
+            
+            if not tracks:
+                continue
+            
+            # Filter out recently used
+            fresh_tracks = [
+                t for t in tracks 
+                if not _is_recently_used_track(_get_track_id(t), history)
+            ]
+            
+            if fresh_tracks:
+                tracks = fresh_tracks
+            
+            # Pick the first result (most relevant match)
+            selected = tracks[0]
+            return _format_track(selected)
+            
+        except Exception as e:
+            logger.warning(f"   ⚠️ Search for '{track_name}' failed: {e}")
+            continue
+    
+    return None
 
 
 def _try_trending(cl, history):
