@@ -31,7 +31,15 @@ jobs:
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          # Install instagrapi first (has strict pinned deps like Pillow==12.2.0)
+          pip install "instagrapi>=2.9.0"
+          # Install moviepy without deps (it requires Pillow<12 but instagrapi needs 12+)
+          # moviepy works fine with Pillow 12 — the constraint is just overly strict
+          pip install --no-deps "moviepy>=2.1.0"
+          # Install moviepy's actual runtime deps (skip Pillow — already installed by instagrapi)
+          pip install "numpy>=1.24.0" "imageio>=2.5.0" "imageio-ffmpeg>=0.4.0" "decorator>=4.0.2" "proglog<=0.1.12" "tqdm"
+          # Install other deps
+          pip install "pyotp>=2.9.0"
 
       - name: 🎬 Install FFmpeg
         run: |
