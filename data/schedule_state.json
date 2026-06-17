@@ -95,6 +95,18 @@
       "post_id": 3921610760973968644,
       "post_code": "DZsXDWjM-UE",
       "status": "uploaded"
+    },
+    {
+      "date": "2026-06-17",
+      "day_name": "Wednesday",
+      "mode": "ai",
+      "timestamp": "2026-06-17T22:41:59.710921",
+      "quote": "Our intention creates our reality. — Unknown",
+      "music_source": "ffmpeg",
+      "music_detail": "FFmpeg: Nostalgic Dream",
+      "post_id": 3921642968925301746,
+      "post_code": "DZseYCis2vy",
+      "status": "uploaded"
     }
   ],
   "week_posts": {
@@ -193,6 +205,18 @@
         "music_detail": "FFmpeg: Suspense Pulse",
         "post_id": 3921610760973968644,
         "post_code": "DZsXDWjM-UE",
+        "status": "uploaded"
+      },
+      {
+        "date": "2026-06-17",
+        "day_name": "Wednesday",
+        "mode": "ai",
+        "timestamp": "2026-06-17T22:41:59.710921",
+        "quote": "Our intention creates our reality. — Unknown",
+        "music_source": "ffmpeg",
+        "music_detail": "FFmpeg: Nostalgic Dream",
+        "post_id": 3921642968925301746,
+        "post_code": "DZseYCis2vy",
         "status": "uploaded"
       }
     ]
