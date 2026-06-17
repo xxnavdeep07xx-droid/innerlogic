@@ -83,6 +83,18 @@
       "post_id": 3920918576251514892,
       "post_code": "DZp5qvSs7AM",
       "status": "uploaded_with_music_muxed"
+    },
+    {
+      "date": "2026-06-17",
+      "day_name": "Wednesday",
+      "mode": "ai",
+      "timestamp": "2026-06-17T21:38:02.763893",
+      "quote": "To acquire knowledge, one must study; but to acquire wisdom, one must observe. — Unknown",
+      "music_source": "ffmpeg",
+      "music_detail": "FFmpeg: Suspense Pulse",
+      "post_id": 3921610760973968644,
+      "post_code": "DZsXDWjM-UE",
+      "status": "uploaded"
     }
   ],
   "week_posts": {
@@ -170,6 +182,18 @@
         "post_id": 3920918576251514892,
         "post_code": "DZp5qvSs7AM",
         "status": "uploaded_with_music_muxed"
+      },
+      {
+        "date": "2026-06-17",
+        "day_name": "Wednesday",
+        "mode": "ai",
+        "timestamp": "2026-06-17T21:38:02.763893",
+        "quote": "To acquire knowledge, one must study; but to acquire wisdom, one must observe. — Unknown",
+        "music_source": "ffmpeg",
+        "music_detail": "FFmpeg: Suspense Pulse",
+        "post_id": 3921610760973968644,
+        "post_code": "DZsXDWjM-UE",
+        "status": "uploaded"
       }
     ]
   }
