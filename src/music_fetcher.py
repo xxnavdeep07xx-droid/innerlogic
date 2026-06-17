@@ -185,8 +185,8 @@ def _build_ffmpeg_dark_drone(duration):
         "-filter_complex",
         f"[0:a]volume=0.3[bass];[1:a]volume=0.15[mid];[2:a]volume=0.08[high];"
         f"[bass][mid][high][3:a]amix=inputs=4:duration=longest,"
-        f"lowpass=f=400,aecho=0.8:0.9:80:0.3,volume=0.3,"
-        f"afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4",
+        f"lowpass=f=400,aecho=0.8:0.9:80:0.3,volume=1.5,"
+        f"afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -216,7 +216,7 @@ def _build_ffmpeg_cinematic_piano(duration):
         f"[a0][a1][a2][a3]amix=inputs=4:duration=longest,"
         f"lowpass=f=2000,highpass=f=150,"
         f"aecho=0.8:0.88:60:0.4,aecho=0.8:0.88:120:0.2,"
-        f"volume=0.35,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+        f"volume=1.5,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -238,7 +238,7 @@ def _build_ffmpeg_melodic_ambient(duration):
         f"[n0][n1][n2][n3][4:a]amix=inputs=5:duration=longest,"
         f"lowpass=f=800,highpass=f=80,"
         f"aecho=0.7:0.85:100:0.35,aecho=0.7:0.85:200:0.15,"
-        f"volume=0.3,afade=t=in:st=0:d=2.5,afade=t=out:st={duration-4}:d=4",
+        f"volume=1.5,afade=t=in:st=0:d=2.5,afade=t=out:st={duration-4}:d=4,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -259,8 +259,8 @@ def _build_ffmpeg_tension_build(duration):
         f"[0:a]volume=0.2[a0];[1:a]volume=0.12[a1];[2:a]volume=0.06[a2];"
         f"[a0][a1][a2][3:a]amix=inputs=4:duration=longest,"
         f"lowpass=f=600,"
-        f"volume=0.25,"
-        f"afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+        f"volume=1.5,"
+        f"afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -282,7 +282,7 @@ def _build_ffmpeg_ethereal_pad(duration):
         f"[e0][e1][e2][e3][4:a]amix=inputs=5:duration=longest,"
         f"lowpass=f=500,highpass=f=60,"
         f"aecho=0.9:0.92:150:0.4,"
-        f"volume=0.28,afade=t=in:st=0:d=3.5,afade=t=out:st={duration-4}:d=4",
+        f"volume=1.5,afade=t=in:st=0:d=3.5,afade=t=out:st={duration-4}:d=4,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -303,7 +303,7 @@ def _build_ffmpeg_deep_space(duration):
         f"[s0][s1][s2][s3][4:a]amix=inputs=5:duration=longest,"
         f"lowpass=f=300,highpass=f=20,"
         f"aecho=0.9:0.95:200:0.5,aecho=0.8:0.9:400:0.3,"
-        f"volume=0.3,afade=t=in:st=0:d=4,afade=t=out:st={duration-5}:d=5",
+        f"volume=1.5,afade=t=in:st=0:d=4,afade=t=out:st={duration-5}:d=5,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -322,7 +322,7 @@ def _build_ffmpeg_rain_meditation(duration):
         f"[2:a]lowpass=f=3000[vn];[3:a]lowpass=f=800[bn];"
         f"[r0][r1][vn][bn]amix=inputs=4:duration=longest,"
         f"lowpass=f=2500,highpass=f=100,"
-        f"volume=0.3,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3",
+        f"volume=1.5,afade=t=in:st=0:d=2,afade=t=out:st={duration-3}:d=3,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -341,7 +341,7 @@ def _build_ffmpeg_suspense_pulse(duration):
         f"[p0][p1][2:a]amix=inputs=3:duration=longest,"
         f"lowpass=f=500,highpass=f=30,"
         f"acompressor=threshold=0.1:ratio=4:attack=0.01:release=0.5,"
-        f"volume=0.3,afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3",
+        f"volume=1.5,afade=t=in:st=0:d=1.5,afade=t=out:st={duration-3}:d=3,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -363,7 +363,7 @@ def _build_ffmpeg_nostalgic_dream(duration):
         f"[d0][d1][d2][d3][4:a]amix=inputs=5:duration=longest,"
         f"lowpass=f=1200,highpass=f=100,"
         f"aecho=0.85:0.9:80:0.45,aecho=0.8:0.88:160:0.25,aecho=0.75:0.85:320:0.1,"
-        f"volume=0.3,afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4",
+        f"volume=1.5,afade=t=in:st=0:d=3,afade=t=out:st={duration-4}:d=4,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
@@ -381,7 +381,7 @@ def _build_ffmpeg_void_ambience(duration):
         f"[v0][v1][2:a]amix=inputs=3:duration=longest,"
         f"lowpass=f=200,highpass=f=15,"
         f"aecho=0.95:0.97:300:0.6,"
-        f"volume=0.25,afade=t=in:st=0:d=5,afade=t=out:st={duration-5}:d=5",
+        f"volume=1.5,afade=t=in:st=0:d=5,afade=t=out:st={duration-5}:d=5,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-t", str(duration), "-c:a", "libmp3lame", "-b:a", "128k",
     ]
 
