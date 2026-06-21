@@ -2,16 +2,23 @@
 """
 Weekly Scheduler — Determines the daily mode for Inner Logic pipeline.
 
-Weekly Schedule:
-    Monday    = AI Day     (FFmpeg-generated original music)
+Weekly Schedule (simplified — Instagram native audio only, every day):
+    Monday    = Insta Day  (Instagram's native trending music)
     Tuesday   = Insta Day  (Instagram's native trending music)
-    Wednesday = AI Day     (FFmpeg-generated original music)
+    Wednesday = Insta Day  (Instagram's native trending music)
     Thursday  = Insta Day  (Instagram's native trending music)
-    Friday    = AI Day     (FFmpeg-generated original music)
+    Friday    = Insta Day  (Instagram's native trending music)
     Saturday  = Insta Day  (Instagram's native trending music)
     Sunday    = Rest Day   (No posting — weekly summary only)
 
 All times are in IST (UTC+5:30).
+
+Why no more "AI Days" (FFmpeg-synthesized music)?
+  - Instagram's algorithm strongly favors reels that use trending native
+    audio. Reels with original/synthesized audio get ~3-5x less reach.
+  - The user explicitly requested full dependence on Instagram's song catalog.
+  - Removing the FFmpeg music path also simplifies the pipeline and removes
+    a class of failures (no more silent-audio fallback edge cases).
 """
 
 import os
@@ -28,12 +35,14 @@ SCHEDULE_FILE = DATA_DIR / "schedule_state.json"
 IST_OFFSET = timedelta(hours=5, minutes=30)
 
 # Day modes: 0=Monday ... 6=Sunday
+# Mon-Sat = insta (Instagram native trending music)
+# Sun     = rest (weekly summary only)
 DAY_MODES = {
-    0: "ai",      # Monday
+    0: "insta",   # Monday
     1: "insta",   # Tuesday
-    2: "ai",      # Wednesday
+    2: "insta",   # Wednesday
     3: "insta",   # Thursday
-    4: "ai",      # Friday
+    4: "insta",   # Friday
     5: "insta",   # Saturday
     6: "rest",    # Sunday
 }
@@ -49,13 +58,11 @@ DAY_NAMES = {
 }
 
 MODE_EMOJI = {
-    "ai": "🤖",
     "insta": "🎵",
     "rest": "📊",
 }
 
 MODE_LABELS = {
-    "ai": "AI Day — FFmpeg Original Music",
     "insta": "Insta Day — Instagram Native Music",
     "rest": "Rest Day — Weekly Summary Only",
 }
@@ -116,9 +123,6 @@ def should_use_instagram_music():
     return get_today_mode() == "insta"
 
 
-def should_use_ai_music():
-    """Check if today uses FFmpeg-generated AI music."""
-    return get_today_mode() == "ai"
 
 
 def get_week_summary_dates():
@@ -265,5 +269,4 @@ if __name__ == "__main__":
     print(f"{info['emoji']} Mode: {info['label']}")
     print(f"   Should post: {should_post_today()}")
     print(f"   Use IG music: {should_use_instagram_music()}")
-    print(f"   Use AI music: {should_use_ai_music()}")
     print(f"   Week summary: {get_week_summary_dates()}")
