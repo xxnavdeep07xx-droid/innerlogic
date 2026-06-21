@@ -2,40 +2,32 @@
 """
 Inner Logic — Instagram Reel Automation
 ========================================
-Main orchestrator that ties together all pipeline steps:
+Main orchestrator that ties together all pipeline steps.
 
-Weekly Schedule:
-    Monday    = 🤖 AI Day     (FFmpeg-generated original music)
-    Tuesday   = 🎵 Insta Day  (Instagram's native trending music)
-    Wednesday = 🤖 AI Day     (FFmpeg-generated original music)
-    Thursday  = 🎵 Insta Day  (Instagram's native trending music)
-    Friday    = 🤖 AI Day     (FFmpeg-generated original music)
-    Saturday  = 🎵 Insta Day  (Instagram's native trending music)
-    Sunday    = 📊 Rest Day   (No posting — weekly summary only)
+Weekly Schedule (simplified — Instagram native audio only, every day):
+    Monday-Saturday = 🎵 Insta Day  (Instagram's native trending music)
+    Sunday          = 📊 Rest Day  (No posting — weekly summary only)
 
-Pipeline Steps (AI Day):
+Pipeline Steps (Insta Day — runs Mon-Sat):
     1. Scrape a unique philosophical quote from the web
     2. Download fonts (Cormorant Garamond + Montserrat)
     3. Generate a dark cinematic background image
-    4. Generate original music with FFmpeg (10 styles)
-    5. Create a 15-second reel with MoviePy/FFmpeg
+    4. Generate an AI-powered caption (Pollinations LLM, free, no API key)
+       — falls back to local templates if the LLM call fails
+    5. Create a 15-second reel with silent audio (IG native music added at upload)
     6. Wait for best posting time (smart scheduler)
-    7. Post reel to Instagram via instagrapi
-    8. Record performance for future optimization
+    7. Login to Instagram, search trending music
+    8. Upload reel with Instagram native music attached
+    9. Record performance for future optimization
 
-Pipeline Steps (Insta Day):
-    1. Scrape a unique philosophical quote from the web
-    2. Download fonts (Cormorant Garamond + Montserrat)
-    3. Generate a dark cinematic background image
-    4. Create a 15-second reel WITHOUT music (silent audio)
-    5. Wait for best posting time (smart scheduler)
-    6. Login to Instagram, search trending music
-    7. Upload reel with Instagram native music attached
-    8. Record performance for future optimization
-
-Pipeline Steps (Rest Day):
+Pipeline Steps (Rest Day — runs Sunday):
     1. Generate weekly summary (.md)
     2. Done — no reel, no posting
+
+The old "AI Day" pipeline (FFmpeg-synthesized music on Mon/Wed/Fri) has been
+removed — Instagram's algorithm strongly favors reels that use trending
+native audio, and the user requested full dependence on Instagram's song
+catalog for maximum reach.
 """
 
 import os
@@ -52,7 +44,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from quote_scraper import pick_quote_from_web
 from quote_picker import pick_quote
 from image_generator import generate_image
-from music_fetcher import fetch_music, fetch_ai_music
 from video_creator import create_reel
 from caption_generator import generate_caption
 from instagram import post_reel, login
@@ -67,7 +58,6 @@ from scheduler import (
     get_today_info,
     should_post_today,
     should_use_instagram_music,
-    should_use_ai_music,
     is_rest_day,
     record_daily_run,
 )
@@ -89,10 +79,8 @@ INSTAGRAM_PASSWORD = os.environ.get("INSTAGRAM_PASSWORD", "")
 # Optional: 2FA TOTP secret
 INSTAGRAM_TOTP_SECRET = os.environ.get("INSTAGRAM_TOTP_SECRET", "")
 
-# API keys (optional — used as fallback on AI days)
+# Optional: Pexels API key (used by image_generator for higher-quality backgrounds)
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
-PIXABAY_API_KEY = os.environ.get("PIXABAY_API_KEY", "")
-FREESOUND_TOKEN = os.environ.get("FREESOUND_TOKEN", "")
 
 # Smart scheduling: Set to "true" to auto-find the best posting time
 SMART_SCHEDULING = os.environ.get("SMART_SCHEDULING", "true").lower() == "true"
@@ -137,131 +125,6 @@ def cleanup():
     if TEMP_DIR.exists():
         shutil.rmtree(TEMP_DIR)
     logger.info("✅ Cleanup complete")
-
-
-# ─── AI Day Pipeline (FFmpeg Music) ─────────────────────────────────────────
-
-def run_ai_day_pipeline(today_info):
-    """
-    Run the pipeline for AI Day (Mon/Wed/Fri).
-    
-    Uses FFmpeg-generated music. No external APIs needed.
-    The music is baked into the video, then uploaded normally.
-    """
-    start_time = datetime.now()
-    mode = today_info["mode"]
-    
-    logger.info(f"🤖 AI Day Pipeline — {today_info['day_name']}, {today_info['date_ist']}")
-    
-    try:
-        # Step 1: Scrape a unique quote
-        logger.info("💡 Step 1/8: Scraping a unique philosophical quote...")
-        quote = pick_quote_from_web(str(USED_QUOTES_FILE))
-        logger.info(f"   📝 \"{quote['text'][:60]}...\" — {quote['author']}")
-        logger.info(f"   🔗 Source: {quote.get('source', 'unknown')}")
-        
-        # Step 2: Download fonts
-        logger.info("🔤 Step 2/8: Ensuring fonts are available...")
-        font_paths = ensure_fonts(str(FONTS_DIR))
-        logger.info("   ✅ Fonts ready")
-        
-        # Step 3: Generate background image
-        logger.info("🎨 Step 3/8: Generating dark cinematic image...")
-        image_path = generate_image(quote, str(TEMP_DIR))
-        logger.info(f"   🖼️  Image saved: {image_path}")
-        
-        # Step 4: Generate AI music (FFmpeg only)
-        logger.info("🎵 Step 4/8: Generating original AI music with FFmpeg...")
-        music_path, music_detail = fetch_ai_music(str(TEMP_DIR))
-        if music_path:
-            logger.info(f"   🎶 AI music generated: {music_detail}")
-        else:
-            logger.warning("   ⚠️ AI music generation failed — will use fallback")
-        
-        # Step 5: Create video reel
-        logger.info("🎬 Step 5/8: Creating 15-second reel...")
-        
-        # If we have AI music, use it. Otherwise try the full fallback chain.
-        if music_path:
-            video_path = create_reel(
-                image_path=image_path,
-                music_path=music_path,
-                quote=quote,
-                temp_dir=str(TEMP_DIR),
-                font_paths=font_paths
-            )
-        else:
-            # Fallback: use the full 6-tier music fetcher
-            logger.info("   🔄 Falling back to full music fetcher chain...")
-            fallback_music = fetch_music(PIXABAY_API_KEY, str(TEMP_DIR), FREESOUND_TOKEN)
-            video_path = create_reel(
-                image_path=image_path,
-                music_path=fallback_music,
-                quote=quote,
-                temp_dir=str(TEMP_DIR),
-                font_paths=font_paths
-            )
-            music_detail = "fallback_chain"
-        
-        logger.info(f"   📹 Video saved: {video_path}")
-        
-        # Step 6: Generate caption
-        logger.info("📝 Step 6/8: Generating caption & hashtags...")
-        caption = generate_caption(quote)
-        logger.info(f"   📋 Caption: {caption[:80]}...")
-        
-        # Step 7: Smart scheduling
-        logger.info("⏰ Step 7/8: Smart scheduling — finding the best time to post...")
-        
-        if SMART_SCHEDULING:
-            logger.info("   📊 Analyzing past reel performance...")
-            best_hour = calculate_best_time()
-            logger.info(f"   🏆 Best time today: {best_hour:02d}:00 IST")
-            wait_until_best_time(best_hour)
-        else:
-            logger.info("   📋 Smart scheduling disabled — posting now")
-        
-        # Step 8: Post reel to Instagram (normal upload — music is baked in)
-        logger.info("📱 Step 8/8: Posting reel to Instagram...")
-        result = post_reel(
-            video_path=video_path,
-            caption=caption
-        )
-        logger.info(f"   ✅ Reel posted successfully! ID: {result.get('id', 'unknown')}")
-        
-        # Record this post
-        try:
-            media_code = result.get("code", "")
-            if media_code:
-                record_post(
-                    media_code=media_code,
-                    posted_at_utc=datetime.utcnow(),
-                    hour_ist=None,
-                )
-                logger.info("   📊 Post recorded for future scheduling optimization")
-        except Exception as e:
-            logger.warning(f"   ⚠️  Could not record post performance: {e}")
-        
-        # Record in schedule state
-        record_daily_run(
-            mode=mode,
-            quote_text=quote.get("text", ""),
-            quote_author=quote.get("author", ""),
-            music_source="ffmpeg",
-            music_detail=music_detail or "unknown",
-            post_result=result,
-        )
-        
-        # Done!
-        elapsed = (datetime.now() - start_time).total_seconds()
-        logger.info(f"🎉 AI Day pipeline complete! Total time: {elapsed:.1f}s")
-        
-    except Exception as e:
-        logger.error(f"❌ AI Day pipeline failed: {str(e)}")
-        record_daily_run(mode=mode, error=str(e))
-        import traceback
-        logger.error(traceback.format_exc())
-        sys.exit(1)
 
 
 # ─── Insta Day Pipeline (Instagram Native Music) ────────────────────────────
@@ -512,13 +375,8 @@ def main():
         if is_rest_day():
             # Sunday — rest day, weekly summary only
             run_rest_day_pipeline(today_info)
-        elif should_use_ai_music():
-            # Mon/Wed/Fri — AI Day (FFmpeg music)
-            validate_env()
-            setup_temp_dir()
-            run_ai_day_pipeline(today_info)
         elif should_use_instagram_music():
-            # Tue/Thu/Sat — Insta Day (IG native music)
+            # Mon-Sat — Insta Day (IG native trending music)
             validate_env()
             setup_temp_dir()
             run_insta_day_pipeline(today_info)
