@@ -149,6 +149,12 @@
       "day_name": "Sunday",
       "mode": "rest",
       "timestamp": "2026-06-21T15:17:06.872277"
+    },
+    {
+      "date": "2026-06-21",
+      "day_name": "Sunday",
+      "mode": "rest",
+      "timestamp": "2026-06-21T19:55:10.282511"
     }
   ],
   "week_posts": {
@@ -302,6 +308,12 @@
         "day_name": "Sunday",
         "mode": "rest",
         "timestamp": "2026-06-21T15:17:06.872277"
+      },
+      {
+        "date": "2026-06-21",
+        "day_name": "Sunday",
+        "mode": "rest",
+        "timestamp": "2026-06-21T19:55:10.282511"
       }
     ]
   }
