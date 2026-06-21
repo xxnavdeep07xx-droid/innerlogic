@@ -143,6 +143,12 @@
       "post_id": 3923732188296743657,
       "post_code": "DZz5aLtMYrp",
       "status": "uploaded_with_music_muxed"
+    },
+    {
+      "date": "2026-06-21",
+      "day_name": "Sunday",
+      "mode": "rest",
+      "timestamp": "2026-06-21T15:17:06.872277"
     }
   ],
   "week_posts": {
@@ -290,6 +296,12 @@
         "post_id": 3923732188296743657,
         "post_code": "DZz5aLtMYrp",
         "status": "uploaded_with_music_muxed"
+      },
+      {
+        "date": "2026-06-21",
+        "day_name": "Sunday",
+        "mode": "rest",
+        "timestamp": "2026-06-21T15:17:06.872277"
       }
     ]
   }
