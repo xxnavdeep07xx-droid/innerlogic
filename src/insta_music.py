@@ -341,36 +341,40 @@ def _mux_audio_ffmpeg(video_path, audio_path, temp_dir):
         return None
 
 
-def upload_reel_with_instagram_music(cl, video_path, caption, track_info, history=None):
+def upload_reel_with_instagram_music(cl, video_path, caption, track_info,
+                                      history=None, cover_frame_path=None):
     """
     Upload a reel with Instagram's native music attached.
-    
+
     Tries multiple upload methods in order:
     1. clip_upload_as_reel_with_music() — downloads track, muxes audio with MoviePy, uploads
        (Most reliable — video has actual audio baked in + proper metadata)
     2. FFmpeg audio mux + clip_upload_with_music() — manual audio muxing fallback
     3. clip_upload_with_music() — metadata-only (less reliable with silent video audio)
     4. clip_upload() without music — graceful fallback
-    
-    WHY Method 1 is best: clip_upload_with_music() only adds METADATA about the music
-    track. It does NOT mux audio into the video. When the video has a silent/empty
-    audio track, Instagram's server-side audio mixing often fails silently, resulting
-    in the music showing as attached but not being audible. Method 1 actually downloads
-    the music, muxes it into the video file, and uploads with proper metadata.
+
+    Args:
+        cover_frame_path: Optional path to a custom cover-frame PNG to use as the
+            IG feed thumbnail. If provided, overrides the auto-generated thumbnail.
     """
     import time
-    
+
     if history is None:
         history = _load_history()
-    
+
     raw_track = track_info.get("raw_track")
     track_name = track_info.get("name", "Unknown")
     track_artist = track_info.get("artist", "")
     track_id = track_info.get("id", "")
-    
+
     logger.info(f"   🎵 Attaching Instagram music: {track_name} by {track_artist}")
-    
-    thumbnail_path = _generate_thumbnail(video_path)
+
+    # Prefer the custom cover frame; fall back to a video-frame thumbnail
+    if cover_frame_path and os.path.exists(cover_frame_path):
+        thumbnail_path = cover_frame_path
+        logger.info(f"   🖼️  Using custom cover frame as thumbnail")
+    else:
+        thumbnail_path = _generate_thumbnail(video_path)
     errors = []
     
     # ── Method 1: clip_upload_as_reel_with_music (BEST — muxes audio locally) ──

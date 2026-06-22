@@ -1,0 +1,53 @@
+name: Refresh Post Metrics
+
+on:
+  schedule:
+    # Run once daily at 10:00 AM IST = 04:30 UTC
+    # Fetches view/like/comment counts for posts made in the last 7 days,
+    # so the smart scheduler has real data to optimize posting times.
+    - cron: '30 4 * * *'
+
+  workflow_dispatch:
+
+permissions:
+  contents: write  # Needed to push updated post_performance.json back to repo
+
+jobs:
+  refresh-metrics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "instagrapi>=2.9.0" "pyotp>=2.9.0" "requests>=2.31.0"
+
+      - name: 📊 Refresh metrics for recent posts
+        env:
+          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
+          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+          INSTAGRAM_TOTP_SECRET: ${{ secrets.INSTAGRAM_TOTP_SECRET }}
+          INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
+        run: |
+          python3 src/refresh_metrics.py
+
+      - name: 💾 Save updated metrics
+        if: always()
+        run: |
+          git config --global user.name "InnerLogic Bot"
+          git config --global user.email "bot@innerlogic.dev"
+          if [ -f data/post_performance.json ]; then
+            git add data/post_performance.json
+            git diff --cached --quiet || git commit -m "📊 Refresh post metrics (views/likes/comments)"
+            git push
+            echo "Metrics saved"
+          fi
