@@ -437,19 +437,235 @@ def _create_vignette_clip(width, height, duration):
     return vignette
 
 
+# ─── Cover frame (IG thumbnail) ──────────────────────────────────────────────
+#
+# The cover frame is what Instagram shows in the feed / explore page BEFORE
+# the user taps to play. The default first-frame (dark bg + slow fade-in
+# text) is often pitch-black → nobody clicks → no views.
+#
+# This cover frame is a separate PNG: bright, high-contrast quote text in
+# BOLD sans-serif (different from the in-reel serif) over the cinematic
+# background. Optimized for click-through.
+# ────────────────────────────────────────────────────────────────────────────
+
+def render_cover_frame_png(image_path, quote, font_paths, output_path,
+                            canvas_w=REEL_WIDTH, canvas_h=REEL_HEIGHT):
+    """Render a click-optimized cover-frame PNG for the IG feed thumbnail."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    # Use the background image as the base — same cinematic look
+    bg = Image.open(image_path).convert("RGB")
+    bg = bg.resize((canvas_w, canvas_h), Image.LANCZOS)
+
+    # Apply a HEAVY dark overlay so the bold text pops
+    overlay = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 130))
+    bg_rgba = bg.convert("RGBA")
+    bg_rgba = Image.alpha_composite(bg_rgba, overlay)
+
+    canvas = bg_rgba.copy()
+    draw = ImageDraw.Draw(canvas)
+
+    # Bold sans-serif for the cover (different from in-reel serif) — high contrast
+    bold_font_path = _resolve_font_path(
+        font_paths, "author",
+        fallback="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    )
+    # Try DejaVuSans-Bold directly for maximum legibility
+    try:
+        bold_font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    except Exception:
+        pass
+
+    quote_text = quote["text"].strip()
+    author = quote.get("author", "").strip()
+
+    # Auto-fit font size for the cover (larger than in-reel — for thumbnail legibility)
+    probe = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    probe_draw = ImageDraw.Draw(probe)
+    text_width = canvas_w - 160  # 80px margin each side
+
+    chosen_font = None
+    chosen_lines = None
+    for size in [68, 64, 60, 56, 52, 48, 44]:
+        try:
+            f = ImageFont.truetype(bold_font_path, size)
+        except Exception:
+            f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size)
+        lines = _wrap_with_pil(quote_text, f, text_width, probe_draw)
+        max_w = max(probe_draw.textlength(line, font=f) for line in lines)
+        if max_w <= text_width and len(lines) <= 5:
+            chosen_font = f
+            chosen_lines = lines
+            break
+    if chosen_font is None:
+        try:
+            chosen_font = ImageFont.truetype(bold_font_path, 44)
+        except Exception:
+            chosen_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
+        chosen_lines = _wrap_with_pil(quote_text, chosen_font, text_width, probe_draw)
+
+    # Layout: quote in the upper-middle, author below, brand handle at bottom
+    line_ascent, line_descent = chosen_font.getmetrics()
+    line_h = int(line_ascent + line_descent) + 10
+    quote_block_h = line_h * len(chosen_lines)
+
+    try:
+        author_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+    except Exception:
+        author_font = ImageFont.truetype(bold_font_path, 32)
+
+    author_line = f"— {author}" if author else ""
+    author_h = 50 if author_line else 0
+
+    total_h = quote_block_h + 20 + author_h
+    block_y = int(canvas_h * 0.22)  # upper third — most visible in feed preview
+
+    cx = canvas_w // 2
+
+    # Draw quote
+    y = block_y
+    for line in chosen_lines:
+        w = draw.textlength(line, font=chosen_font)
+        x = cx - w / 2
+        # Hard black shadow for contrast
+        draw.text((x + 3, y + 3), line, font=chosen_font, fill=(0, 0, 0, 220))
+        # Bright white main text
+        draw.text((x, y), line, font=chosen_font, fill=(255, 255, 255, 255))
+        y += line_h
+
+    # Draw author
+    if author_line:
+        y += 12
+        w = draw.textlength(author_line, font=author_font)
+        x = cx - w / 2
+        draw.text((x, y), author_line, font=author_font, fill=(220, 220, 220, 230))
+
+    # Bottom brand strip — high visibility for follow conversion
+    try:
+        brand_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+    except Exception:
+        brand_font = chosen_font
+    brand_text = "@innerlogic.co  •  Daily Philosophy"
+    bw = draw.textlength(brand_text, font=brand_font)
+    bx = cx - bw / 2
+    by = canvas_h - 180
+    # Semi-transparent pill behind the brand text
+    pad_x, pad_y = 24, 12
+    pill_box = [bx - pad_x, by - pad_y, bx + bw + pad_x, by + 28 + pad_y]
+    draw.rounded_rectangle(pill_box, radius=20, fill=(0, 0, 0, 160))
+    draw.text((bx, by), brand_text, font=brand_font, fill=(255, 255, 255, 255))
+
+    canvas.convert("RGB").save(output_path, "PNG")
+    return output_path
+
+
+# ─── End-card (last 1.5s) ────────────────────────────────────────────────────
+
+def render_endcard_png(font_paths, output_path,
+                        canvas_w=REEL_WIDTH, canvas_h=REEL_HEIGHT):
+    """Render a 'follow @innerlogic.co' end-card PNG (last 1.5s of reel)."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    # Large dark gradient overlay on the bottom half
+    _draw_text_backdrop(draw, canvas, canvas_h // 2, canvas_h, opacity=0.65)
+
+    try:
+        big_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+    except Exception:
+        big_font = ImageFont.truetype(_resolve_font_path(font_paths, "author"), 64)
+    try:
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)
+    except Exception:
+        small_font = big_font
+
+    cx = canvas_w // 2
+
+    line1 = "Follow for daily"
+    line2 = "philosophy 🧠"
+    sub = "@innerlogic.co"
+
+    y = int(canvas_h * 0.55)
+    for line in [line1, line2]:
+        w = draw.textlength(line, font=big_font)
+        x = cx - w / 2
+        draw.text((x + 2, y + 2), line, font=big_font, fill=(0, 0, 0, 200))
+        draw.text((x, y), line, font=big_font, fill=(255, 255, 255, 255))
+        y += 80
+
+    y += 30
+    w = draw.textlength(sub, font=small_font)
+    x = cx - w / 2
+    draw.text((x, y), sub, font=small_font, fill=(180, 180, 180, 230))
+
+    canvas.save(output_path, "PNG")
+    return output_path
+
+
+# ─── Word-by-word text reveal sequence ───────────────────────────────────────
+#
+# For the first ~3 seconds, reveal the quote one word at a time. This
+# forces the viewer to slow down and read → boosts completion rate →
+# boosts reach. We render N+1 PNGs (0 words, 1 word, 2 words, ... N words),
+# then sequence them as MoviePy ImageClips at ~250ms per word.
+# ────────────────────────────────────────────────────────────────────────────
+
+def render_word_reveal_sequence(quote, font_paths, temp_dir,
+                                 per_word_duration=0.28,
+                                 canvas_w=REEL_WIDTH, canvas_h=REEL_HEIGHT):
+    """
+    Render a sequence of PNGs, each showing the first k words of the quote
+    at the SAME final position (layout preserved by pre-computing positions).
+
+    Returns: (list_of_png_paths, total_duration, num_words)
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    words = quote["text"].strip().split()
+    n = len(words)
+    if n == 0:
+        return [], 0, 0
+
+    # First, render the FULL text overlay once to lock the layout
+    full_png = os.path.join(temp_dir, "reveal_full.png")
+    render_text_overlay_png(quote, font_paths, full_png,
+                            canvas_w=canvas_w, canvas_h=canvas_h)
+
+    # Now render k-word variants. We render the full quote PNG each time
+    # but with only the first k words visible — by passing a partial quote.
+    # The text gets re-centered, but since we use the same font + width,
+    # word positions for already-shown words stay the same.
+    pngs = []
+    for k in range(1, n + 1):
+        partial = {
+            "text": " ".join(words[:k]),
+            "author": "",  # don't show author during reveal
+            "category": quote.get("category", ""),
+        }
+        path = os.path.join(temp_dir, f"reveal_{k:03d}.png")
+        render_text_overlay_png(partial, font_paths, path,
+                                canvas_w=canvas_w, canvas_h=canvas_h)
+        pngs.append(path)
+
+    total_duration = n * per_word_duration
+    return pngs, total_duration, n
+
+
 # ─── MoviePy Video Creation ──────────────────────────────────────────────────
 
 def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths,
-                        duration=15, theme_key=None):
+                        duration=15, theme_key=None, video_bg_path=None):
     """
     Create a cinematic reel using MoviePy.
 
-    - Ken Burns zoom/pan with dramatic movement
+    - Video background (if video_bg_path given) OR Ken Burns zoom on static image
     - Color grading with cinematic themes
     - Light vignette only
-    - PIL-rendered text overlay (auto-fit, never clipped)
-    - Subtle text float animation
+    - Word-by-word text reveal for the first ~3s (engagement boost)
     - Branded watermark
+    - Optional end-card (last 1.5s)
     """
     import numpy as np
     from PIL import Image
@@ -463,61 +679,95 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths,
 
     output_path = os.path.join(temp_dir, "reel.mp4")
 
-    # --- Background ---
-    bg_img = Image.open(image_path).convert("RGB")
-    bg_img = bg_img.resize((REEL_WIDTH, REEL_HEIGHT), Image.LANCZOS)
-    bg_array = np.array(bg_img)
+    # --- Background: video clip (preferred) or Ken Burns on static image ---
+    if video_bg_path and os.path.exists(video_bg_path):
+        # Video background path — use the video as the base, looped/trimmed to duration.
+        # Apply color grading + slight zoom to make it feel "cinematic" not "stock footage".
+        print(f"   🎥 Using video background: {os.path.basename(video_bg_path)}")
+        from moviepy import VideoFileClip
+        bg_video = VideoFileClip(video_bg_path)
+        # Loop if shorter than duration, trim if longer
+        if bg_video.duration < duration:
+            from moviepy import concatenate_videoclips
+            reps = int(duration / bg_video.duration) + 1
+            bg_video = concatenate_videoclips([bg_video] * reps)
+        bg_video = bg_video.subclipped(0, duration)
 
-    kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down",
-                             "drift_left", "drift_right"])
+        # Resize to 1080x1920 (cover-fit) + slight zoom (1.05x) for cinematic feel
+        def _cover_resize_frame(get_frame, t):
+            f = get_frame(t)
+            h, w = f.shape[:2]
+            target_w, target_h = REEL_WIDTH, REEL_HEIGHT
+            # Cover-fit: scale so the whole target is filled (may crop edges)
+            scale = max(target_w / w, target_h / h) * 1.05  # 5% zoom
+            new_w = int(w * scale); new_h = int(h * scale)
+            img = Image.fromarray(f).resize((new_w, new_h), Image.LANCZOS)
+            # Center crop
+            x0 = (new_w - target_w) // 2
+            y0 = (new_h - target_h) // 2
+            cropped = np.array(img)[y0:y0+target_h, x0:x0+target_w]
+            if theme_key:
+                cropped = apply_color_matrix_np(cropped, theme_key)
+            return cropped
 
-    def make_ken_burns_frame(t):
-        progress = t / duration
-        smooth = progress * progress * (3 - 2 * progress)
+        zoomed_clip = bg_video.transform(_cover_resize_frame)
+        kb_mode = "video_bg"
+    else:
+        # Static image Ken Burns path (original behavior)
+        bg_img = Image.open(image_path).convert("RGB")
+        bg_img = bg_img.resize((REEL_WIDTH, REEL_HEIGHT), Image.LANCZOS)
+        bg_array = np.array(bg_img)
 
-        h, w = bg_array.shape[:2]
+        kb_mode = random.choice(["zoom_in", "zoom_out", "pan_up", "pan_down",
+                                 "drift_left", "drift_right"])
 
-        if kb_mode == "zoom_in":
-            zoom = ZOOM_START + (ZOOM_END - ZOOM_START) * smooth
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
-        elif kb_mode == "zoom_out":
-            zoom = ZOOM_END - (ZOOM_END - ZOOM_START) * smooth
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
-        elif kb_mode == "pan_up":
-            zoom = 1.15
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = (w - new_w) // 2
-            y1 = int((h - new_h) * (1.0 - smooth))
-        elif kb_mode == "pan_down":
-            zoom = 1.15
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = (w - new_w) // 2
-            y1 = int((h - new_h) * smooth)
-        elif kb_mode == "drift_left":
-            zoom = 1.20
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = int((w - new_w) * (1.0 - smooth))
-            y1 = (h - new_h) // 2
-        elif kb_mode == "drift_right":
-            zoom = 1.20
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = int((w - new_w) * smooth)
-            y1 = (h - new_h) // 2
-        else:
-            zoom = 1.0 + 0.20 * smooth
-            new_w = int(w / zoom); new_h = int(h / zoom)
-            x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
+        def make_ken_burns_frame(t):
+            progress = t / duration
+            smooth = progress * progress * (3 - 2 * progress)
 
-        cropped = bg_array[y1:y1+new_h, x1:x1+new_w]
-        img = Image.fromarray(cropped).resize((w, h), Image.LANCZOS)
-        frame = np.array(img)
-        if theme_key:
-            frame = apply_color_matrix_np(frame, theme_key)
-        return frame
+            h, w = bg_array.shape[:2]
 
-    zoomed_clip = VideoClip(frame_function=make_ken_burns_frame, duration=duration)
+            if kb_mode == "zoom_in":
+                zoom = ZOOM_START + (ZOOM_END - ZOOM_START) * smooth
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
+            elif kb_mode == "zoom_out":
+                zoom = ZOOM_END - (ZOOM_END - ZOOM_START) * smooth
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
+            elif kb_mode == "pan_up":
+                zoom = 1.15
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = (w - new_w) // 2
+                y1 = int((h - new_h) * (1.0 - smooth))
+            elif kb_mode == "pan_down":
+                zoom = 1.15
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = (w - new_w) // 2
+                y1 = int((h - new_h) * smooth)
+            elif kb_mode == "drift_left":
+                zoom = 1.20
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = int((w - new_w) * (1.0 - smooth))
+                y1 = (h - new_h) // 2
+            elif kb_mode == "drift_right":
+                zoom = 1.20
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = int((w - new_w) * smooth)
+                y1 = (h - new_h) // 2
+            else:
+                zoom = 1.0 + 0.20 * smooth
+                new_w = int(w / zoom); new_h = int(h / zoom)
+                x1 = (w - new_w) // 2; y1 = (h - new_h) // 2
+
+            cropped = bg_array[y1:y1+new_h, x1:x1+new_w]
+            img = Image.fromarray(cropped).resize((w, h), Image.LANCZOS)
+            frame = np.array(img)
+            if theme_key:
+                frame = apply_color_matrix_np(frame, theme_key)
+            return frame
+
+        zoomed_clip = VideoClip(frame_function=make_ken_burns_frame, duration=duration)
 
     clips = [zoomed_clip]
 
@@ -529,30 +779,61 @@ def create_reel_moviepy(image_path, music_path, quote, temp_dir, font_paths,
     except Exception as e:
         print(f"   Vignette skipped: {e}")
 
-    # --- Text overlay (PIL-rendered PNG with subtle float + fade) ---
+    # --- Text overlay: word-by-word reveal for first ~3s, then full text ---
     try:
-        text_png_path = os.path.join(temp_dir, "text_overlay.png")
-        render_text_overlay_png(quote, font_paths, text_png_path)
-        print(f"   🔤 Text rendered with PIL (auto-fit)")
+        # Generate the cover frame (used as IG thumbnail, saved to temp_dir)
+        cover_path = os.path.join(temp_dir, "cover_frame.png")
+        render_cover_frame_png(image_path, quote, font_paths, cover_path)
+        print(f"   🖼️  Cover frame generated")
 
-        text_clip = ImageClip(text_png_path, duration=duration, transparent=True)
+        # Generate the word-reveal PNG sequence
+        reveal_pngs, reveal_duration, n_words = render_word_reveal_sequence(
+            quote, font_paths, temp_dir, per_word_duration=0.28
+        )
 
-        # Subtle vertical "float" — ±4 px sinusoidal drift (engagement boost).
-        # The text PNG is full-canvas, so position is (0, small_int_offset).
-        # MoviePy requires either string anchors OR pixel ints/floats —
-        # not a mix like ("center", "center+4").
-        FLOAT_AMP = 4.0
-        FLOAT_PERIOD = 6.0  # seconds
+        # Final full-text overlay (with author + watermark) shown after reveal
+        full_text_png = os.path.join(temp_dir, "text_overlay.png")
+        render_text_overlay_png(quote, font_paths, full_text_png)
+        print(f"   🔤 Text rendered (word-by-word reveal: {n_words} words over {reveal_duration:.1f}s)")
 
-        def float_position(t):
-            dy = FLOAT_AMP * math.sin(2 * math.pi * t / FLOAT_PERIOD)
-            return (0, int(dy))
+        # Build the text clip:
+        # - For 0..reveal_duration: cycle through reveal PNGs (1 word, 2 words, ...)
+        # - For reveal_duration..duration-1.5: hold the full text overlay
+        # - For duration-1.5..duration: hold the full text overlay (end-card is separate)
+        from moviepy import ImageClip as _IC, concatenate_videoclips as _concat
 
-        text_clip = text_clip.with_position(float_position)
-        text_clip = text_clip.with_effects([FadeIn(0.7), FadeOut(1.2)])
+        text_clips = []
+        if reveal_pngs and reveal_duration > 0 and reveal_duration < duration - 2.0:
+            per = reveal_duration / len(reveal_pngs)
+            for png in reveal_pngs:
+                c = _IC(png, duration=per + 0.05, transparent=True)  # tiny overlap to avoid flicker
+                text_clips.append(c)
+            # Hold the full text for the remaining time (minus end-card)
+            hold_duration = duration - reveal_duration - 1.5
+            if hold_duration > 0:
+                full_hold = _IC(full_text_png, duration=hold_duration, transparent=True)
+                text_clips.append(full_hold)
+        else:
+            # Quote too short or no reveal — just hold the full text
+            full_hold = _IC(full_text_png, duration=duration - 1.5, transparent=True)
+            text_clips.append(full_hold)
+
+        text_clip = _concat(text_clips, method="compose")
+        text_clip = text_clip.with_position(("center", "center"))
+        text_clip = text_clip.with_effects([FadeIn(0.3), FadeOut(0.8)])
         clips.append(text_clip)
+
+        # End-card (last 1.5s) — fade in/out
+        endcard_png = os.path.join(temp_dir, "endcard.png")
+        render_endcard_png(font_paths, endcard_png)
+        endcard_clip = _IC(endcard_png, duration=1.5, transparent=True)
+        endcard_clip = endcard_clip.with_position(("center", "center"))
+        endcard_clip = endcard_clip.with_start(duration - 1.5)
+        endcard_clip = endcard_clip.with_effects([FadeIn(0.4), FadeOut(0.5)])
+        clips.append(endcard_clip)
     except Exception as e:
         print(f"   ⚠️  Text overlay failed: {e}")
+        import traceback; traceback.print_exc()
 
     # Composite
     video = CompositeVideoClip(clips, size=(REEL_WIDTH, REEL_HEIGHT))
@@ -785,12 +1066,18 @@ def _create_reel_ffmpeg_simple(image_path, music_path, text_png_path, temp_dir,
 # ─── Main Entry Point ────────────────────────────────────────────────────────
 
 def create_reel(image_path, music_path, quote, temp_dir, font_paths,
-                duration=15, theme_key=None):
+                duration=15, theme_key=None, video_bg_path=None):
     """
     Create a 15-second Instagram Reel video.
 
-    Tries MoviePy first (Ken Burns zoom, vignette, color grading, PIL text),
-    falls back to FFmpeg pipeline (same PIL text PNG) if MoviePy fails.
+    Tries MoviePy first (video bg / Ken Burns zoom, vignette, color grading,
+    word-by-word text reveal, cover frame, end-card), falls back to FFmpeg
+    pipeline (simpler, no video bg) if MoviePy fails.
+
+    Args:
+        video_bg_path: Optional path to a vertical video file to use as the
+            background instead of the static image. If provided AND MoviePy
+            is available, the reel will use the video as the background.
     """
     if theme_key is None:
         theme_key = get_random_theme()
@@ -799,7 +1086,8 @@ def create_reel(image_path, music_path, quote, temp_dir, font_paths,
         try:
             print(f"   MoviePy available — creating enhanced cinematic reel...")
             return create_reel_moviepy(
-                image_path, music_path, quote, temp_dir, font_paths, duration, theme_key
+                image_path, music_path, quote, temp_dir, font_paths,
+                duration, theme_key, video_bg_path=video_bg_path
             )
         except Exception as e:
             print(f"   MoviePy failed: {e}")
