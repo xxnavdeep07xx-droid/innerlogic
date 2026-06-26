@@ -190,6 +190,13 @@
       "mode": "insta",
       "timestamp": "2026-06-25T22:25:31.002894",
       "error": "Authentication error — session may have expired. Try deleting the session file and re-running."
+    },
+    {
+      "date": "2026-06-26",
+      "day_name": "Friday",
+      "mode": "insta",
+      "timestamp": "2026-06-26T12:13:59.207328",
+      "error": "Authentication error — session may have expired. Try deleting the session file and re-running."
     }
   ],
   "week_posts": {
@@ -385,6 +392,13 @@
         "day_name": "Thursday",
         "mode": "insta",
         "timestamp": "2026-06-25T22:25:31.002894",
+        "error": "Authentication error — session may have expired. Try deleting the session file and re-running."
+      },
+      {
+        "date": "2026-06-26",
+        "day_name": "Friday",
+        "mode": "insta",
+        "timestamp": "2026-06-26T12:13:59.207328",
         "error": "Authentication error — session may have expired. Try deleting the session file and re-running."
       }
     ]
